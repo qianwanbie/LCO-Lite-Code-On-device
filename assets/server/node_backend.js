@@ -31,7 +31,7 @@ const http = require('http');
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
-const { execSync, exec, spawn } = require('child_process');
+const { execSync, exec, execFileSync, spawn } = require('child_process');
 
 // ---------------------------------------------------------------------------
 // Configuration
@@ -328,11 +328,26 @@ function dispatchRpc(id, method, params) {
 
       // ── claudeChat ──
       case 'claudeChat': {
-        const message = (params.message || '').replace(/"/g, '\\"');
+        const message = params.message || '';
         if (!message) return jsonError(id, -32602, 'Missing message');
         try {
-          const stdout = execSync('claude -p "' + message + '"', {
-            cwd: ROOT, encoding: 'utf-8', timeout: 120000, maxBuffer: 10 * 1024 * 1024
+          // Resolve absolute path to claude binary
+          const termuxBin = '/data/data/com.termux/files/usr/bin';
+          const claudePath = termuxBin + '/claude';
+          if (!fs.existsSync(claudePath)) {
+            // Try `which claude` as fallback
+            const which = execSync('which claude', { encoding: 'utf-8', timeout: 5000 }).trim();
+            if (!which) throw new Error('claude binary not found');
+          }
+          // Build clean environment with correct PATH
+          const env = Object.assign({}, process.env, {
+            PATH: [termuxBin, termuxBin + '/applets', '/usr/bin', '/bin', '/system/bin'].join(':'),
+            HOME: process.env.HOME || '/data/data/com.termux/files/home',
+          });
+          // Run claude directly via execFileSync (no shell, absolute path)
+          const stdout = execFileSync(claudePath, ['-p', message], {
+            cwd: ROOT, encoding: 'utf-8', timeout: 120000, maxBuffer: 10 * 1024 * 1024,
+            env: env,
           });
           return jsonResult(id, { response: stdout.trim() });
         } catch (e) {
