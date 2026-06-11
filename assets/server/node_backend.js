@@ -160,7 +160,7 @@ function checksum(content) {
 // ---------------------------------------------------------------------------
 // JSON-RPC method dispatch
 // ---------------------------------------------------------------------------
-function dispatchRpc(id, method, params) {
+async function dispatchRpc(id, method, params) {
   try {
     switch (method) {
 
@@ -330,29 +330,41 @@ function dispatchRpc(id, method, params) {
       case 'claudeChat': {
         const message = params.message || '';
         if (!message) return jsonError(id, -32602, 'Missing message');
-        try {
-          // Resolve absolute path to claude binary
-          const termuxBin = '/data/data/com.termux/files/usr/bin';
-          const claudePath = termuxBin + '/claude';
-          if (!fs.existsSync(claudePath)) {
-            // Try `which claude` as fallback
-            const which = execSync('which claude', { encoding: 'utf-8', timeout: 5000 }).trim();
-            if (!which) throw new Error('claude binary not found');
-          }
-          // Build clean environment with correct PATH
-          const env = Object.assign({}, process.env, {
-            PATH: [termuxBin, termuxBin + '/applets', '/usr/bin', '/bin', '/system/bin'].join(':'),
-            HOME: process.env.HOME || '/data/data/com.termux/files/home',
-          });
-          // Run claude directly via execFileSync (no shell, absolute path)
-          const stdout = execFileSync(claudePath, ['-p', message], {
-            cwd: ROOT, encoding: 'utf-8', timeout: 120000, maxBuffer: 10 * 1024 * 1024,
-            env: env,
-          });
-          return jsonResult(id, { response: stdout.trim() });
-        } catch (e) {
-          return jsonResult(id, { response: (e.stdout || '') + '\n' + (e.stderr || e.message) });
+        const termuxBin = '/data/data/com.termux/files/usr/bin';
+        const claudePath = termuxBin + '/claude';
+        if (!fs.existsSync(claudePath)) {
+          return jsonError(id, -32603, 'claude binary not found at ' + claudePath);
         }
+        const env = Object.assign({}, process.env, {
+          PATH: [termuxBin, termuxBin + '/applets', '/usr/bin', '/bin', '/system/bin'].join(':'),
+          HOME: process.env.HOME || '/data/data/com.termux/files/home',
+        });
+        // Use spawn (not exec) — no shell, direct binary execution
+        const claude = spawn(claudePath, ['-p', message], {
+          cwd: ROOT, env: env,
+          stdio: ['pipe', 'pipe', 'pipe'],
+        });
+        let stdout = '';
+        let stderr = '';
+        claude.stdout.setEncoding('utf-8');
+        claude.stdout.on('data', (chunk) => { stdout += chunk; });
+        claude.stderr.setEncoding('utf-8');
+        claude.stderr.on('data', (chunk) => { stderr += chunk; });
+        claude.on('error', (err) => {
+          console.error('[LCO Backend] claude spawn error:', err.message);
+        });
+        // Return Promise that resolves when claude exits
+        const response = await new Promise((resolve) => {
+          claude.on('close', (code) => {
+            resolve(jsonResult(id, { response: (stdout + (code !== 0 ? '\n' + stderr : '')).trim() }));
+          });
+          // Timeout after 120s
+          setTimeout(() => {
+            claude.kill();
+            resolve(jsonResult(id, { response: stdout.trim() + '\n[timeout]' }));
+          }, 120000);
+        });
+        return response;
       }
 
       // ── Unknown ──
@@ -381,12 +393,12 @@ const server = http.createServer((req, res) => {
   if (req.method === 'POST' && req.url === '/api/rpc') {
     let body = '';
     req.on('data', chunk => body += chunk);
-    req.on('end', () => {
+    req.on('end', async () => {
       try {
         const payload = JSON.parse(body);
         const { id, method, params } = payload;
         if (!method) throw new Error('Missing method');
-        const response = dispatchRpc(id || 0, method, params || {});
+        const response = await dispatchRpc(id || 0, method, params || {});
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(response);
       } catch (e) {
