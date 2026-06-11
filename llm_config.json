@@ -1,0 +1,6 @@
+{
+  "provider": "anthropic",
+  "endpoint": "https://api.deepseek.com/anthropic",
+  "apiKey": "env:ANTHROPIC_API_KEY",
+  "model": "deepseek-chat"
+}

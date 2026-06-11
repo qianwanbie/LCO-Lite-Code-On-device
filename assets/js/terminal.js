@@ -230,32 +230,53 @@
       updateStatusBar('● Terminal connected', 'success');
     };
 
+    // Buffer for reassembling fragmented WebSocket frames
+    var msgBuffer = '';
     ws.onmessage = function (event) {
-      try {
-        var msg = JSON.parse(event.data);
-        if (msg.type === 'output') {
-          terminal.write(msg.data);
-        } else if (msg.type === 'error') {
-          terminal.write('\x1b[31m' + msg.data + '\x1b[0m');
-        } else if (msg.type === 'cd') {
-          // Server requests terminal to cd — send as input to PTY
-          if (msg.path) {
-            ws.send(JSON.stringify({ type: 'input', data: 'cd "' + msg.path + '"\r' }));
-            ws.send(JSON.stringify({ type: 'input', data: 'clear\r' }));
-          }
-        } else if (msg.type === 'terminalOutput') {
-          // Output from runScript — display with a header
-          terminal.write('\r\n\x1b[90m── Output of ' + (msg.path || 'script') + ' ──\x1b[0m\r\n');
-          terminal.write(msg.data || '');
-          terminal.write('\x1b[90m── End of output ──\x1b[0m\r\n');
+      msgBuffer += event.data;
+      while (msgBuffer.length > 0) {
+        // Try length|JSON protocol first
+        var pipeIdx = msgBuffer.indexOf('|');
+        if (pipeIdx > 0 && pipeIdx < 10) {
+          var lenStr = msgBuffer.substring(0, pipeIdx);
+          var msgLen = parseInt(lenStr, 10);
+          if (!isNaN(msgLen) && msgBuffer.length >= pipeIdx + 1 + msgLen) {
+            var jsonStr = msgBuffer.substring(pipeIdx + 1, pipeIdx + 1 + msgLen);
+            msgBuffer = msgBuffer.substring(pipeIdx + 1 + msgLen);
+            try { processMessage(JSON.parse(jsonStr)); } catch(e) {}
+            continue;
+          } else if (!isNaN(msgLen)) { break; }
         }
-      } catch (e) {
-        terminal.write(event.data);
+        // Fallback: try direct JSON parse
+        try {
+          var msg = JSON.parse(msgBuffer);
+          msgBuffer = '';
+          processMessage(msg);
+        } catch (e) { break; }
       }
     };
 
+    function processMessage(msg) {
+      if (msg.type === 'output') {
+        var data = msg.data || '';
+        try { data = decodeURIComponent(data); } catch (_) {}
+        terminal.write(data);
+      } else if (msg.type === 'error') {
+        terminal.write('\x1b[31m' + (msg.data || '') + '\x1b[0m');
+      } else if (msg.type === 'cd') {
+        if (msg.path) {
+          ws.send(JSON.stringify({ type: 'input', data: 'cd "' + msg.path + '"\r' }));
+          ws.send(JSON.stringify({ type: 'input', data: 'clear\r' }));
+        }
+      } else if (msg.type === 'terminalOutput') {
+        terminal.write('\r\n\x1b[90m── ' + (msg.path || 'script') + ' ──\x1b[0m\r\n');
+        terminal.write((msg.data || ''));
+        terminal.write('\x1b[90m── End ──\x1b[0m\r\n');
+      }
+    }
+
     ws.onerror = function () {
-      // Expected in Phase 1 (no backend running).
+      // Expected when backend is not running.
     };
 
     ws.onclose = function () {

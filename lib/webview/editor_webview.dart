@@ -54,7 +54,7 @@ class _EditorWebViewState extends State<EditorWebView> {
       if (notification.isNotEmpty) {
         _controller.runJavaScript(
           "window.dispatchEvent(new CustomEvent('lco-file-change', "
-          "{detail: $notification}))",
+          "{detail: ${jsonEncode(notification)}}))",
         );
       }
     });
@@ -92,9 +92,10 @@ class _EditorWebViewState extends State<EditorWebView> {
 
     final response = await _bridge.handleMessage(message.message);
     if (response.isNotEmpty) {
+      // jsonEncode escapes quotes/newlines so LLM output doesn't break JS syntax
       _controller.runJavaScript(
         "window.dispatchEvent(new CustomEvent('lco-response', "
-        "{detail: $response}))",
+        "{detail: ${jsonEncode(response)}}))",
       );
     }
   }

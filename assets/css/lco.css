@@ -462,26 +462,20 @@ html, body {
 /* ── Floating Toolbar ── */
 #lco-toolbar {
   position: fixed;
-  top: 8px;
-  right: 8px;
-  z-index: 10000;
-  display: flex;
-  gap: 6px;
-  opacity: 0.8;
-  transition: opacity 0.2s;
+  top: 6px; right: 6px;
+  z-index: 50001;
+  display: flex; gap: 4px;
+  opacity: 0.92;
+  background: #252526; border: 1px solid #555;
+  border-radius: 6px; padding: 4px 6px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.5);
 }
-#lco-toolbar:hover { opacity: 1; }
 #lco-toolbar button {
-  background: #333;
-  color: #ccc;
-  border: 1px solid #555;
-  border-radius: 4px;
-  padding: 5px 10px;
-  font-size: 11px;
-  cursor: pointer;
-  font-family: inherit;
-  white-space: nowrap;
-  user-select: none;
+  background: #3c3c3c; color: #ccc;
+  border: 1px solid #555; border-radius: 4px;
+  padding: 6px 10px; font-size: 12px;
+  cursor: pointer; font-family: inherit;
+  white-space: nowrap; user-select: none;
   -webkit-user-select: none;
   transition: background 0.15s, border-color 0.15s;
 }

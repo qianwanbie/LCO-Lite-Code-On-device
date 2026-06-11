@@ -98,6 +98,16 @@ try {
 }
 
 // ---------------------------------------------------------------------------
+// WebSocket send — length-prefix + URI-encode for Chinese charset safety
+// ---------------------------------------------------------------------------
+function wsSend(ws, obj) {
+  if (ws.readyState !== WebSocket.OPEN) return;
+  if (obj.data) obj.data = encodeURIComponent(obj.data);
+  const json = JSON.stringify(obj);
+  ws.send(Buffer.byteLength(json, 'utf-8') + '|' + json);
+}
+
+// ---------------------------------------------------------------------------
 // JSON-RPC helpers
 // ---------------------------------------------------------------------------
 
@@ -602,7 +612,7 @@ function handleTerminalConnection(ws) {
       // PTY output → WebSocket
       ptyProcess.onData(data => {
         if (ws.readyState === WebSocket.OPEN) {
-          ws.send(JSON.stringify({ type: 'output', data: data }));
+          wsSend(ws, { type: 'output', data: data });
         }
       });
 
@@ -610,11 +620,11 @@ function handleTerminalConnection(ws) {
       ptyProcess.onExit(({ exitCode, signal }) => {
         console.log('[LCO Backend] PTY exited with code', exitCode, 'signal', signal);
         if (ws.readyState === WebSocket.OPEN) {
-          ws.send(JSON.stringify({
+          wsSend(ws, {
             type: 'output',
             data: '\r\n\x1b[33m[Process exited with code ' + exitCode + ']\x1b[0m\r\n'
-          }));
-          ws.send(JSON.stringify({ type: 'exit', exitCode: exitCode }));
+          });
+          wsSend(ws, { type: 'exit', exitCode: exitCode });
         }
         ptyProcess = null;
       });
@@ -672,12 +682,12 @@ function handleTerminalConnection(ws) {
 
       bashProcess.stdout.on('data', (data) => {
         if (ws.readyState === WebSocket.OPEN) {
-          ws.send(JSON.stringify({ type: 'output', data: data.toString() }));
+          wsSend(ws, { type: 'output', data: data.toString() });
         }
       });
       bashProcess.stderr.on('data', (data) => {
         if (ws.readyState === WebSocket.OPEN) {
-          ws.send(JSON.stringify({ type: 'output', data: data.toString() }));
+          wsSend(ws, { type: 'output', data: data.toString() });
         }
       });
       bashProcess.on('exit', (code) => {
