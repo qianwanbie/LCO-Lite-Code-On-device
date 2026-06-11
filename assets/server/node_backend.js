@@ -173,7 +173,8 @@ function checksum(content) {
 // ---------------------------------------------------------------------------
 function getWorkspaceContext() {
   const lines = [];
-  lines.push('You are an AI coding assistant integrated into LCO IDE.');
+  lines.push('You are an AI coding assistant integrated into LCO IDE — a full Android development environment.');
+  lines.push('You have FULL access to the workspace. Be proactive: read files, run commands, create/edit files.');
   lines.push('Current workspace: ' + ROOT);
   lines.push('');
   lines.push('## File Tree');
@@ -183,11 +184,26 @@ function getWorkspaceContext() {
     lines.push('(unable to read directory)');
   }
   lines.push('');
-  lines.push('## Available Tools');
-  lines.push('You can instruct the IDE to perform these actions:');
-  lines.push('- Create file: respond with ```file:path\\ncontent```');
-  lines.push('- Run command: respond with ```shell:command```');
-  lines.push('- The IDE will auto-execute file creation and refresh the explorer.');
+  lines.push('## Your Capabilities (use these blocks in responses)');
+  lines.push('');
+  lines.push('1. CREATE/EDIT files:');
+  lines.push('```file:relative/path.py');
+  lines.push('print("hello")');
+  lines.push('```');
+  lines.push('');
+  lines.push('2. RUN shell commands:');
+  lines.push('```shell:ls -la');
+  lines.push('git status');
+  lines.push('```');
+  lines.push('');
+  lines.push('3. READ any file:');
+  lines.push('```read:src/main.dart```');
+  lines.push('');
+  lines.push('4. DELETE files: just tell the user to right-click → Delete in the explorer.');
+  lines.push('');
+  lines.push('Be PROACTIVE. If you need to see a file to answer a question, use ```read:```.');
+  lines.push('If you can fix something, use ```file:``` to apply the fix directly.');
+  lines.push('After creating files, the IDE auto-refreshes the file tree.');
   return lines.join('\n');
 }
 
@@ -527,24 +543,50 @@ async function dispatchRpc(id, method, params) {
           chatWithLLM(cfg, message, (err, text) => {
             if (err) resolve(jsonError(id, -32603, err));
             else {
-              // Auto-execute file creation blocks: ```file:path\ncontent```
+              // ---- Auto-execute blocks in Claude's response ----
               const actions = [];
-              const processed = (text || '').replace(/```file:(\S+)\n([\s\S]*?)```/g, (_, fpath, content) => {
+              let processed = text || '';
+
+              // 1. file:path → create/overwrite file
+              processed = processed.replace(/```file:(\S+)\n([\s\S]*?)```/g, (_, fpath, content) => {
                 try {
-                  const filePath = resolvePath(fpath.trim());
-                  const dir = path.dirname(filePath);
+                  const fp = resolvePath(fpath.trim());
+                  const dir = path.dirname(fp);
                   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-                  fs.writeFileSync(filePath, content.trim(), 'utf-8');
+                  fs.writeFileSync(fp, content.trim(), 'utf-8');
                   actions.push('✓ created ' + fpath.trim());
-                  return '```\n[LCO: file created at ' + fpath.trim() + ']\n```';
+                  return '```\n[LCO: ✓ created ' + fpath.trim() + ']\n```';
                 } catch (e) {
-                  actions.push('✗ failed ' + fpath.trim() + ': ' + e.message);
-                  return '```\n[LCO: FAILED ' + fpath.trim() + ']\n```';
+                  actions.push('✗ ' + fpath.trim() + ': ' + e.message);
+                  return '```\n[LCO: ✗ ' + fpath.trim() + ']\n```';
                 }
               });
-              if (actions.length > 0) {
-                broadcastFileTreeRefresh();
-              }
+
+              // 2. shell:command → execute and show output
+              processed = processed.replace(/```shell:([\s\S]*?)```/g, (_, cmd) => {
+                try {
+                  const out = execSync(cmd.trim(), { cwd: ROOT, encoding: 'utf-8', timeout: 30000 });
+                  actions.push('$ ' + cmd.trim().split('\n')[0]);
+                  return '```\n$ ' + cmd.trim() + '\n' + out.trim() + '\n```';
+                } catch (e) {
+                  const out = (e.stdout || '') + (e.stderr || e.message);
+                  return '```\n$ ' + cmd.trim() + '\n' + out.trim() + '\n```';
+                }
+              });
+
+              // 3. read:path → show file contents (handle optional whitespace before closing ```)
+              processed = processed.replace(/```read:(\S+)\s*```/g, (_, fpath) => {
+                try {
+                  const fp = resolvePath(fpath.trim());
+                  const content = fs.readFileSync(fp, 'utf-8');
+                  const lang = (fpath.split('.').pop() || '');
+                  return '```' + lang + '\n' + content.trim() + '\n```';
+                } catch (e) {
+                  return '```\n[read error: ' + e.message + ']\n```';
+                }
+              });
+
+              if (actions.length > 0) broadcastFileTreeRefresh();
               const result = (actions.length ? actions.join('\n') + '\n\n' : '') + processed;
               resolve(jsonResult(id, { response: result }));
             }
