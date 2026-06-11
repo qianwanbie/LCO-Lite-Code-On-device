@@ -526,7 +526,28 @@ async function dispatchRpc(id, method, params) {
         const response = await new Promise((resolve) => {
           chatWithLLM(cfg, message, (err, text) => {
             if (err) resolve(jsonError(id, -32603, err));
-            else resolve(jsonResult(id, { response: text || '(empty response)' }));
+            else {
+              // Auto-execute file creation blocks: ```file:path\ncontent```
+              const actions = [];
+              const processed = (text || '').replace(/```file:(\S+)\n([\s\S]*?)```/g, (_, fpath, content) => {
+                try {
+                  const filePath = resolvePath(fpath.trim());
+                  const dir = path.dirname(filePath);
+                  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+                  fs.writeFileSync(filePath, content.trim(), 'utf-8');
+                  actions.push('✓ created ' + fpath.trim());
+                  return '```\n[LCO: file created at ' + fpath.trim() + ']\n```';
+                } catch (e) {
+                  actions.push('✗ failed ' + fpath.trim() + ': ' + e.message);
+                  return '```\n[LCO: FAILED ' + fpath.trim() + ']\n```';
+                }
+              });
+              if (actions.length > 0) {
+                broadcastFileTreeRefresh();
+              }
+              const result = (actions.length ? actions.join('\n') + '\n\n' : '') + processed;
+              resolve(jsonResult(id, { response: result }));
+            }
           });
         });
         return response;
