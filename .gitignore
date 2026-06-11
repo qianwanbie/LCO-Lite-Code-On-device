@@ -33,4 +33,6 @@ Thumbs.db
 assets/monaco-editor/    # Monaco Editor offline bundle (large, excluded from git)
 assets/vendor/           # xterm.js offline bundle (downloaded, excluded)
 flutter/                 # Flutter SDK (not part of this project)
+CLAUDE.md                # AI assistant context (local only)
+detail.md                # Detailed docs (local only)
 pubspec.lock
