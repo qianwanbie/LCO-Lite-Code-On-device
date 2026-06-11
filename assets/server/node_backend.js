@@ -923,6 +923,7 @@ function handleClaudeConnection(ws) {
     LCO_ROOT: ROOT,
   });
   try {
+    // Run claude via bash to get proper glibc/termux environment
     const pty = ptySpawn(termuxBash, [claudeScript], {
       name: 'xterm-256color', cols: 100, rows: 30,
       cwd: ROOT, env: env,
@@ -930,9 +931,19 @@ function handleClaudeConnection(ws) {
     console.log('[LCO Backend] Claude PTY spawned PID:', pty.pid);
     ws.send(JSON.stringify({ type: 'claude-ready' }));
     pty.onData(data => {
-      if (ws.readyState === WebSocket.OPEN) wsSend(ws, { type: 'claude-output', data: data });
+      if (ws.readyState === WebSocket.OPEN) {
+        wsSend(ws, { type: 'claude-output', data: data });
+      }
     });
-    pty.onExit(({ exitCode }) => {
+    // Log any stderr output
+    let stderrAcc = '';
+    pty.onData(data => {
+      if (data.indexOf('\x1b') === -1 && data.trim()) {
+        stderrAcc += data;
+      }
+    });
+    pty.onExit(({ exitCode, signal }) => {
+      console.log('[LCO Backend] Claude PTY exited code', exitCode, 'signal', signal);
       if (ws.readyState === WebSocket.OPEN) {
         wsSend(ws, { type: 'claude-output', data: '\r\n\x1b[33m[Claude exited code ' + exitCode + ']\x1b[0m\r\n' });
         ws.send(JSON.stringify({ type: 'claude-exit', exitCode: exitCode }));
