@@ -1,160 +1,101 @@
 /**
- * LCO Claude Chat Sidebar
+ * LCO Claude Chat Sidebar — WebSocket streaming via /ws/claude
  *
- * Sends messages via JSON-RPC (claudeChat) to the backend LLM adapter.
- * Responses are rendered in chat bubbles. Supports auto-execution of
- * file:/shell:/read: blocks in Claude's responses.
+ * Opens a persistent Claude CLI session via backend node-pty.
+ * The Claude process survives chat close and reattaches on reopen.
  */
 (function () {
   'use strict';
 
-  var sidebar = null;
-  var messagesEl = null;
-  var inputEl = null;
-  var sendBtn = null;
-  var isVisible = false;
-  var isStreaming = false;
-
-  // ---------------------------------------------------------------------------
-  // Init
-  // ---------------------------------------------------------------------------
+  var sidebar, messagesEl, inputEl, sendBtn;
+  var isVisible = false, ws = null, isConnected = false;
+  var WS_URL = 'ws://127.0.0.1:9876/ws/claude';
 
   function init() {
     sidebar = document.getElementById('lco-chat-sidebar');
     messagesEl = document.getElementById('lco-chat-messages');
     inputEl = document.getElementById('lco-chat-input');
     sendBtn = document.getElementById('lco-chat-send');
+    if (!sidebar || !messagesEl || !inputEl) { setTimeout(init, 300); return; }
 
-    if (!sidebar || !messagesEl || !inputEl) {
-      setTimeout(init, 300);
-      return;
-    }
-
-    // Toggle buttons
-    var btnChat = document.getElementById('lco-btn-chat');
-    var btnChatWs = document.getElementById('lco-btn-chat-ws');
-    if (btnChat) btnChat.addEventListener('click', toggle);
-    if (btnChatWs) btnChatWs.addEventListener('click', toggle);
-
-    // Close button
-    var btnClose = document.getElementById('lco-chat-close');
-    if (btnClose) btnClose.addEventListener('click', hide);
-
-    // Send button
+    document.getElementById('lco-btn-chat')?.addEventListener('click', toggle);
+    document.getElementById('lco-btn-chat-ws')?.addEventListener('click', toggle);
+    document.getElementById('lco-chat-close')?.addEventListener('click', hide);
     if (sendBtn) sendBtn.addEventListener('click', sendMessage);
-
-    // Enter to send, Shift+Enter newline
     inputEl.addEventListener('keydown', function (e) {
-      if (e.key === 'Enter' && !e.shiftKey) {
-        e.preventDefault();
-        sendMessage();
-      }
+      if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
     });
-
     console.log('[Chat] Initialized');
   }
 
-  // ---------------------------------------------------------------------------
-  // Show / Hide
-  // ---------------------------------------------------------------------------
-
   function toggle() { isVisible ? hide() : show(); }
-
   function show() {
     if (!sidebar) return;
-    sidebar.classList.remove('hidden');
-    isVisible = true;
+    sidebar.classList.remove('hidden'); isVisible = true;
+    if (!isConnected) connect();
     setTimeout(function () { inputEl.focus(); }, 200);
   }
+  function hide() { if (sidebar) sidebar.classList.add('hidden'); isVisible = false; }
+  window.LCOChat = { toggle: toggle, show: show, hide: hide };
 
-  function hide() {
-    if (!sidebar) return;
-    sidebar.classList.add('hidden');
-    isVisible = false;
+  // ── WebSocket ──
+
+  function connect() {
+    if (ws) { try { ws.close(); } catch (_) {} }
+    try { ws = new WebSocket(WS_URL); } catch (e) { addMsg('Connection failed', 'system'); return; }
+
+    ws.onopen = function () {
+      isConnected = true;
+      addMsg('⌬ Claude CLI starting…', 'system');
+    };
+
+    ws.onmessage = function (e) {
+      try {
+        var m = JSON.parse(e.data);
+        if (m.type === 'claude-output') {
+          var d = m.data || '';
+          try { d = decodeURIComponent(d); } catch (_) {}
+          addMsg(d, 'claude');
+        } else if (m.type === 'claude-ready') {
+          // Session ready
+        } else if (m.type === 'claude-error') {
+          addMsg('Error: ' + m.data, 'system');
+        }
+      } catch (_) {}
+    };
+
+    ws.onerror = function () { addMsg('Connection error', 'system'); };
+    ws.onclose = function () { isConnected = false; };
   }
-
-  window.LCOChat = {
-    toggle: toggle, show: show, hide: hide,
-    isVisible: function () { return isVisible; }
-  };
-
-  // ---------------------------------------------------------------------------
-  // Send message via JSON-RPC
-  // ---------------------------------------------------------------------------
 
   function sendMessage() {
-    if (isStreaming || !inputEl) return;
-    var text = inputEl.value.trim();
+    if (!inputEl) return;
+    var text = inputEl.value; inputEl.value = '';
     if (!text) return;
-
-    addBubble(text, 'user');
-    inputEl.value = '';
-    isStreaming = true;
-    if (sendBtn) sendBtn.disabled = true;
-
-    var bubble = addBubble('', 'claude');
-    var bubbleId = 'claude-' + Date.now();
-    bubble.id = bubbleId;
-
-    if (!window.LCOEditor || !window.LCOEditor.sendRpc) {
-      updateBubble(bubble, 'Editor bridge not ready.');
-      isStreaming = false;
-      if (sendBtn) sendBtn.disabled = false;
-      return;
-    }
-
-    window.LCOEditor.sendRpc('claudeChat', { message: text }).then(function (result) {
-      var output = result && result.response ? result.response : '(no response)';
-      // Strip ANSI escape codes
-      output = output.replace(/\x1b\[[0-9;]*m/g, '');
-      updateBubble(bubble, output);
-      isStreaming = false;
-      if (sendBtn) sendBtn.disabled = false;
-    }).catch(function (err) {
-      updateBubble(bubble, 'Error: ' + (err.message || 'unknown'));
-      isStreaming = false;
-      if (sendBtn) sendBtn.disabled = false;
-    });
+    addMsg(text, 'user');
+    if (!isConnected) { connect(); return; }
+    try { ws.send(JSON.stringify({ type: 'claude-input', data: text + '\n' })); } catch (e) {}
   }
 
-  function updateBubble(el, text) {
-    el.textContent = text;
-    scrollToBottom();
-  }
-
-  function addBubble(text, role) {
+  function addMsg(text, role) {
     var el = document.createElement('div');
-    el.className = 'chat-bubble ' + role;
+    el.className = 'chat-bubble ' + (role === 'claude' ? 'claude' : role === 'system' ? 'system' : 'user');
+    if (role === 'claude') {
+      // Append to last claude bubble if it exists
+      var last = messagesEl.querySelector('.chat-bubble.claude:last-child');
+      if (last) { last.textContent += text; scrollDown(); return last; }
+    }
     el.textContent = text;
     messagesEl.appendChild(el);
-    scrollToBottom();
+    scrollDown();
     return el;
   }
 
-  function addSystemMessage(text) {
-    addBubble(text, 'system');
-  }
-
-  function scrollToBottom() {
-    if (messagesEl) messagesEl.scrollTop = messagesEl.scrollHeight;
-  }
-
-  // ---------------------------------------------------------------------------
-  // Wait for DOM + editor bridge, then init
-  // ---------------------------------------------------------------------------
+  function scrollDown() { if (messagesEl) messagesEl.scrollTop = messagesEl.scrollHeight; }
 
   function waitAndInit() {
-    if (document.getElementById('lco-chat-sidebar')) {
-      init();
-    } else {
-      setTimeout(waitAndInit, 300);
-    }
+    if (document.getElementById('lco-chat-sidebar')) init(); else setTimeout(waitAndInit, 300);
   }
-
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', waitAndInit);
-  } else {
-    waitAndInit();
-  }
-
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', waitAndInit);
+  else waitAndInit();
 })();
