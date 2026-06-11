@@ -69,6 +69,10 @@ class TermuxEngine implements IDEEngine {
       _sendRpc('runScript', {'path': path});
 
   @override
+  Future<JsonRpcResponse> claudeChat(String message) =>
+      _sendRpc('claudeChat', {'message': message});
+
+  @override
   Stream<FileChangeEvent> get fileChangeStream => _fileChangeController.stream;
 
   @override

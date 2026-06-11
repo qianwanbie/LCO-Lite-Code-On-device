@@ -164,6 +164,10 @@ class JSBridge {
         final scriptP = _normalizePath(params['path'] as String? ?? '');
         return _withId(await _engine.runScript(scriptP), id);
 
+      case 'claudeChat':
+        final msg = params['message'] as String? ?? '';
+        return _withId(await _engine.claudeChat(msg), id);
+
       default:
         return JsonRpcResponse.error(
           id: id,

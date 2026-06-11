@@ -35,6 +35,9 @@ abstract class IDEEngine {
   /// Run a script file.
   Future<JsonRpcResponse> runScript(String path);
 
+  /// Execute a Claude chat message.
+  Future<JsonRpcResponse> claudeChat(String message);
+
   /// One-time initialization. Called once after the engine is constructed.
   ///
   /// [MockEngine] creates its temp directory here.

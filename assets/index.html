@@ -92,6 +92,19 @@
 
       </div><!-- /lco-main-area -->
 
+      <!-- ◆◆◆ Right Chat Sidebar — Claude ◆◆◆ -->
+      <div id="lco-chat-sidebar" class="hidden">
+        <div id="lco-chat-header">
+          <span>⌬ CLAUDE CHAT</span>
+          <button id="lco-chat-close" class="close-btn" title="Close Chat">✕</button>
+        </div>
+        <div id="lco-chat-messages"></div>
+        <div id="lco-chat-input-bar">
+          <textarea id="lco-chat-input" rows="1" placeholder="Ask Claude... (Enter to send)"></textarea>
+          <button id="lco-chat-send" title="Send">↑</button>
+        </div>
+      </div>
+
     </div><!-- /lco-body -->
 
     <!-- ── Status Bar ── -->
@@ -107,6 +120,7 @@
     <button id="lco-btn-save" class="save-btn" title="Save (Ctrl+S)">💾 Save</button>
     <button id="lco-btn-locale" class="locale-btn" title="Toggle language">EN</button>
     <button id="lco-btn-git" class="git-btn" title="Run git status">⎇ Git</button>
+    <button id="lco-btn-chat" class="chat-btn" title="Claude Chat">⌬ Chat</button>
   </div>
 
   <!-- ================================================================= -->
@@ -248,6 +262,7 @@
   <!-- LCO components (loaded after Monaco and xterm are available) -->
   <script src="js/file-explorer.js"></script>
   <script src="js/terminal.js"></script>
+  <script src="js/chat.js"></script>
 
   <!-- Sidebar resize drag handle -->
   <script>

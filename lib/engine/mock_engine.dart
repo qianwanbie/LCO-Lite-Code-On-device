@@ -272,6 +272,13 @@ class MockEngine implements IDEEngine {
   }
 
   @override
+  Future<JsonRpcResponse> claudeChat(String message) async {
+    return JsonRpcResponse.success(id: _nextId(), result: {
+      'response': '[MockEngine] Claude is not available in mock mode.\nStart the Node.js backend and run `claude` in the terminal.',
+    });
+  }
+
+  @override
   Future<void> dispose() async {
     await _fileChangeController.close();
   }
