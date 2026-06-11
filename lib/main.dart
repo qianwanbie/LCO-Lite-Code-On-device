@@ -5,6 +5,7 @@
 library;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:lco/engine/ide_engine.dart';
 import 'package:lco/engine/termux_engine.dart';
 import 'package:lco/webview/editor_webview.dart';
@@ -12,8 +13,10 @@ import 'package:lco/webview/editor_webview.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
+  // Hide system status bar + nav bar for fullscreen IDE experience
+  await SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
+
   // Use TermuxEngine to connect to the Node.js backend.
-  // All file operations go through the backend → PROJECT_ROOT workspace.
   final engine = TermuxEngine();
   await engine.initialize();
 

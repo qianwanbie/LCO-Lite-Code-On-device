@@ -38,6 +38,9 @@ abstract class IDEEngine {
   /// Execute a Claude chat message.
   Future<JsonRpcResponse> claudeChat(String message);
 
+  /// Update LLM provider configuration.
+  Future<JsonRpcResponse> updateLLMConfig(Map<String, dynamic> config);
+
   /// One-time initialization. Called once after the engine is constructed.
   ///
   /// [MockEngine] creates its temp directory here.

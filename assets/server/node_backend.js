@@ -31,7 +31,8 @@ const http = require('http');
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
-const { execSync, exec, execFileSync, spawn } = require('child_process');
+const { execSync, exec, spawn } = require('child_process');
+const https = require('https');
 
 // ---------------------------------------------------------------------------
 // Configuration
@@ -155,6 +156,121 @@ function resolvePath(relativePath) {
 
 function checksum(content) {
   return 'sha256:' + crypto.createHash('sha256').update(content).digest('hex');
+}
+
+// ---------------------------------------------------------------------------
+// LLM Adapter — reads llm_config.json, calls provider API
+// ---------------------------------------------------------------------------
+const LLM_CONFIG_PATH = path.join(ROOT, 'llm_config.json');
+
+function loadLLMConfig() {
+  try {
+    if (fs.existsSync(LLM_CONFIG_PATH)) {
+      return JSON.parse(fs.readFileSync(LLM_CONFIG_PATH, 'utf-8'));
+    }
+  } catch (_) { /* fall through to defaults */ }
+  // Default: try Anthropic API via env key, fallback to DeepSeek
+  return {
+    provider: process.env.ANTHROPIC_API_KEY ? 'anthropic' : 'deepseek',
+    endpoint: 'https://api.deepseek.com',
+    apiKey: 'env:DEEPSEEK_API_KEY',
+    model: 'deepseek-chat',
+  };
+}
+
+function resolveApiKey(cfg) {
+  const raw = cfg.apiKey || '';
+  if (raw.startsWith('env:')) {
+    return process.env[raw.slice(4)] || '';
+  }
+  return raw;
+}
+
+function chatWithLLM(cfg, message, callback) {
+  const key = resolveApiKey(cfg);
+  if (!key) {
+    callback('No API key configured. Set it in llm_config.json or env.', null);
+    return;
+  }
+  const provider = cfg.provider || 'deepseek';
+  const model = cfg.model || 'deepseek-chat';
+  const endpoint = cfg.endpoint || 'https://api.deepseek.com';
+
+  if (provider === 'anthropic') {
+    _callAnthropic(endpoint, key, model, message, callback);
+  } else if (provider === 'deepseek' || provider === 'openai') {
+    _callOpenAI(endpoint, key, model, message, callback);
+  } else if (provider === 'claude-cli') {
+    _callClaudeCLI(message, callback);
+  } else {
+    callback('Unknown provider: ' + provider, null);
+  }
+}
+
+function _callAnthropic(endpoint, key, model, message, callback) {
+  const body = JSON.stringify({
+    model: model || 'claude-fable-5',
+    max_tokens: 2048,
+    messages: [{ role: 'user', content: message }],
+  });
+  const url = new URL(endpoint.endsWith('/messages') ? endpoint : endpoint + '/v1/messages');
+  const req = https.request({
+    hostname: url.hostname, path: url.pathname,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'x-api-key': key, 'anthropic-version': '2023-06-01' },
+  }, (res) => {
+    let data = '';
+    res.on('data', c => data += c);
+    res.on('end', () => {
+      try {
+        const j = JSON.parse(data);
+        const text = (j.content || []).map(b => b.text || '').join('');
+        callback(null, text || data);
+      } catch (_) { callback(null, data); }
+    });
+  });
+  req.on('error', e => callback(e.message, null));
+  req.write(body); req.end();
+}
+
+function _callOpenAI(endpoint, key, model, message, callback) {
+  const body = JSON.stringify({
+    model: model,
+    messages: [{ role: 'user', content: message }],
+    max_tokens: 2048,
+  });
+  const url = new URL(endpoint.endsWith('/chat/completions') ? endpoint : endpoint + '/v1/chat/completions');
+  const req = https.request({
+    hostname: url.hostname, path: url.pathname,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + key },
+  }, (res) => {
+    let data = '';
+    res.on('data', c => data += c);
+    res.on('end', () => {
+      try {
+        const j = JSON.parse(data);
+        const text = (j.choices || []).map(c => (c.message || {}).content || '').join('');
+        callback(null, text || data);
+      } catch (_) { callback(null, data); }
+    });
+  });
+  req.on('error', e => callback(e.message, null));
+  req.write(body); req.end();
+}
+
+function _callClaudeCLI(message, callback) {
+  const bashPath = '/data/data/com.termux/files/usr/bin/bash';
+  const claudeScript = '/data/data/com.termux/files/usr/bin/claude';
+  const proc = spawn(bashPath, [claudeScript, '-p', message], {
+    cwd: ROOT, env: process.env, stdio: ['pipe', 'pipe', 'pipe'],
+  });
+  let out = '', err = '';
+  proc.stdout.on('data', c => out += c);
+  proc.stderr.on('data', c => err += c);
+  proc.on('close', () => callback(null, (out || err || '(no output)').trim()));
+  proc.on('error', e => callback(e.message, null));
+  setTimeout(() => { proc.kill(); callback(null, (out || '(timeout)').trim()); }, 120000);
 }
 
 // ---------------------------------------------------------------------------
@@ -326,45 +442,30 @@ async function dispatchRpc(id, method, params) {
         return jsonResult(id, { ok: true, workspace: path.basename(newRoot), path: newRoot });
       }
 
-      // ── claudeChat ──
-      case 'claudeChat': {
+      // ── claudeChat / chatMessage ──
+      case 'claudeChat':
+      case 'chatMessage': {
         const message = params.message || '';
         if (!message) return jsonError(id, -32602, 'Missing message');
-        const termuxBin = '/data/data/com.termux/files/usr/bin';
-        const claudePath = termuxBin + '/claude';
-        if (!fs.existsSync(claudePath)) {
-          return jsonError(id, -32603, 'claude binary not found at ' + claudePath);
-        }
-        const env = Object.assign({}, process.env, {
-          PATH: [termuxBin, termuxBin + '/applets', '/usr/bin', '/bin', '/system/bin'].join(':'),
-          HOME: process.env.HOME || '/data/data/com.termux/files/home',
-        });
-        // Use spawn (not exec) — no shell, direct binary execution
-        const claude = spawn(claudePath, ['-p', message], {
-          cwd: ROOT, env: env,
-          stdio: ['pipe', 'pipe', 'pipe'],
-        });
-        let stdout = '';
-        let stderr = '';
-        claude.stdout.setEncoding('utf-8');
-        claude.stdout.on('data', (chunk) => { stdout += chunk; });
-        claude.stderr.setEncoding('utf-8');
-        claude.stderr.on('data', (chunk) => { stderr += chunk; });
-        claude.on('error', (err) => {
-          console.error('[LCO Backend] claude spawn error:', err.message);
-        });
-        // Return Promise that resolves when claude exits
+        const cfg = loadLLMConfig();
         const response = await new Promise((resolve) => {
-          claude.on('close', (code) => {
-            resolve(jsonResult(id, { response: (stdout + (code !== 0 ? '\n' + stderr : '')).trim() }));
+          chatWithLLM(cfg, message, (err, text) => {
+            if (err) resolve(jsonError(id, -32603, err));
+            else resolve(jsonResult(id, { response: text || '(empty response)' }));
           });
-          // Timeout after 120s
-          setTimeout(() => {
-            claude.kill();
-            resolve(jsonResult(id, { response: stdout.trim() + '\n[timeout]' }));
-          }, 120000);
         });
         return response;
+      }
+
+      // ── updateLLMConfig ──
+      case 'updateLLMConfig': {
+        const config = params.config || {};
+        try {
+          fs.writeFileSync(LLM_CONFIG_PATH, JSON.stringify(config, null, 2), 'utf-8');
+          return jsonResult(id, { ok: true, path: LLM_CONFIG_PATH });
+        } catch (e) {
+          return jsonError(id, -32603, 'Failed to save config: ' + e.message);
+        }
       }
 
       // ── Unknown ──

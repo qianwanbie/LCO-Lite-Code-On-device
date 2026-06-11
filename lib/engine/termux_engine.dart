@@ -73,6 +73,10 @@ class TermuxEngine implements IDEEngine {
       _sendRpc('claudeChat', {'message': message});
 
   @override
+  Future<JsonRpcResponse> updateLLMConfig(Map<String, dynamic> config) =>
+      _sendRpc('updateLLMConfig', {'config': config});
+
+  @override
   Stream<FileChangeEvent> get fileChangeStream => _fileChangeController.stream;
 
   @override

@@ -165,8 +165,13 @@ class JSBridge {
         return _withId(await _engine.runScript(scriptP), id);
 
       case 'claudeChat':
+      case 'chatMessage':
         final msg = params['message'] as String? ?? '';
         return _withId(await _engine.claudeChat(msg), id);
+
+      case 'updateLLMConfig':
+        final cfg = params['config'] as Map<String, dynamic>? ?? {};
+        return _withId(await _engine.updateLLMConfig(cfg), id);
 
       default:
         return JsonRpcResponse.error(
