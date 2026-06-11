@@ -30,9 +30,11 @@
       return;
     }
 
-    // Toggle button
+    // Toggle button (both toolbar and workspace bar)
     var btnChat = document.getElementById('lco-btn-chat');
+    var btnChatWs = document.getElementById('lco-btn-chat-ws');
     if (btnChat) btnChat.addEventListener('click', toggle);
+    if (btnChatWs) btnChatWs.addEventListener('click', toggle);
 
     // Close button
     var btnClose = document.getElementById('lco-chat-close');
