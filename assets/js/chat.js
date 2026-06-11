@@ -1,9 +1,9 @@
 /**
  * LCO Claude Chat Sidebar
  *
- * Provides an embedded chat UI that communicates with Claude via
- * the Node.js backend. Messages are sent as JSON-RPC and responses
- * are streamed into chat bubbles.
+ * Connects to the Node.js backend via WebSocket /ws/claude for
+ * interactive Claude Code sessions. Input is sent directly to
+ * the Claude PTY process; output is streamed into chat bubbles.
  */
 (function () {
   'use strict';
@@ -13,7 +13,11 @@
   var inputEl = null;
   var sendBtn = null;
   var isVisible = false;
-  var isStreaming = false;
+  var ws = null;
+  var claudeBubble = null;
+  var isConnected = false;
+
+  var WS_URL = 'ws://127.0.0.1:9876/ws/claude';
 
   // ---------------------------------------------------------------------------
   // Init
@@ -30,7 +34,7 @@
       return;
     }
 
-    // Toggle button (both toolbar and workspace bar)
+    // Toggle buttons
     var btnChat = document.getElementById('lco-btn-chat');
     var btnChatWs = document.getElementById('lco-btn-chat-ws');
     if (btnChat) btnChat.addEventListener('click', toggle);
@@ -43,7 +47,7 @@
     // Send button
     if (sendBtn) sendBtn.addEventListener('click', sendMessage);
 
-    // Enter to send, Shift+Enter for newline
+    // Enter to send
     inputEl.addEventListener('keydown', function (e) {
       if (e.key === 'Enter' && !e.shiftKey) {
         e.preventDefault();
@@ -67,10 +71,8 @@
     if (!sidebar) return;
     sidebar.classList.remove('hidden');
     isVisible = true;
-    inputEl.focus();
-    // Check Claude context
-    addSystemMessage('Claude chat active — working directory: ' +
-      (window.LCOFileExplorer ? 'current workspace' : 'lco-workspace'));
+    if (!isConnected) connect();
+    if (inputEl) inputEl.focus();
   }
 
   function hide() {
@@ -79,54 +81,91 @@
     isVisible = false;
   }
 
-  // Expose toggle globally so the toolbar button works
-  window.toggleClaudeChat = toggle;
   window.LCOChat = {
     toggle: toggle, show: show, hide: hide, isVisible: function () { return isVisible; }
   };
 
   // ---------------------------------------------------------------------------
-  // Messages
+  // WebSocket connection to /ws/claude
+  // ---------------------------------------------------------------------------
+
+  function connect() {
+    if (ws) { try { ws.close(); } catch (_) {} }
+    try {
+      ws = new WebSocket(WS_URL);
+    } catch (e) {
+      addSystemMessage('WebSocket error: ' + e.message);
+      return;
+    }
+    ws.onopen = function () {
+      isConnected = true;
+      addSystemMessage('⌬ Claude Code session started');
+      if (sendBtn) sendBtn.disabled = false;
+    };
+    ws.onmessage = function (event) {
+      try {
+        var msg = JSON.parse(event.data);
+        if (msg.type === 'claude-output') {
+          appendClaudeOutput(msg.data);
+        } else if (msg.type === 'claude-error') {
+          addSystemMessage('Error: ' + msg.data);
+        } else if (msg.type === 'claude-ready') {
+          addSystemMessage('Claude is ready. Type your message below.');
+        } else if (msg.type === 'claude-exit') {
+          addSystemMessage('Claude session ended (exit ' + msg.exitCode + '). Click ⌬ to restart.');
+          isConnected = false;
+        }
+      } catch (_) { /* non-JSON chunk */ }
+    };
+    ws.onerror = function () {
+      addSystemMessage('Connection error. Is the backend running?');
+    };
+    ws.onclose = function () {
+      isConnected = false;
+      if (isVisible) addSystemMessage('Session closed. Toggle chat to reconnect.');
+    };
+  }
+
+  // ---------------------------------------------------------------------------
+  // Send message to Claude
   // ---------------------------------------------------------------------------
 
   function sendMessage() {
-    if (isStreaming || !inputEl) return;
-    var text = inputEl.value.trim();
-    if (!text) return;
-
-    // Add user bubble
-    addBubble(text, 'user');
+    if (!inputEl) return;
+    var text = inputEl.value;
+    if (!text && !isConnected) return;
     inputEl.value = '';
-    isStreaming = true;
-    if (sendBtn) sendBtn.disabled = true;
 
-    // Create Claude bubble (will be updated with streamed response)
-    var claudeBubble = addBubble('', 'claude');
-    claudeBubble.id = 'claude-response-' + Date.now();
+    if (text) {
+      addBubble(text, 'user');
+    }
 
-    // Send via RPC → backend spawns claude process
-    if (!window.LCOEditor || !window.LCOEditor.sendRpc) {
-      updateClaudeBubble(claudeBubble, 'Error: Editor bridge not ready.');
-      isStreaming = false;
-      if (sendBtn) sendBtn.disabled = false;
+    if (!isConnected) {
+      addSystemMessage('Reconnecting...');
+      connect();
       return;
     }
 
-    window.LCOEditor.sendRpc('claudeChat', { message: text }).then(function (result) {
-      var output = (result && result.response) ? result.response : '(no response)';
-      updateClaudeBubble(claudeBubble, output);
-      isStreaming = false;
-      if (sendBtn) sendBtn.disabled = false;
-    }).catch(function (err) {
-      updateClaudeBubble(claudeBubble, 'Error: ' + (err.message || 'unknown'));
-      isStreaming = false;
-      if (sendBtn) sendBtn.disabled = false;
-    });
+    // Start new Claude bubble for streaming output
+    claudeBubble = addBubble('', 'claude');
+    try {
+      ws.send(JSON.stringify({ type: 'claude-input', data: text + '\n' }));
+    } catch (e) {
+      addSystemMessage('Send error: ' + e.message);
+    }
   }
 
-  function updateClaudeBubble(el, text) {
-    el.textContent = '';
-    el.textContent = text;
+  function appendClaudeOutput(data) {
+    // Decode URI-encoded data
+    try { data = decodeURIComponent(data); } catch (_) {}
+    // Strip ANSI escape codes for chat display
+    var clean = data.replace(/\x1b\[[0-9;]*m/g, '');
+    // If there's an active bubble, append; otherwise create new
+    if (claudeBubble) {
+      claudeBubble.textContent += clean;
+    } else {
+      claudeBubble = addBubble(clean, 'claude');
+    }
     scrollToBottom();
   }
 
@@ -148,11 +187,11 @@
   }
 
   // ---------------------------------------------------------------------------
-  // Wait for editor, then init
+  // Wait for DOM + editor, then init
   // ---------------------------------------------------------------------------
 
   function waitAndInit() {
-    if (document.getElementById('lco-chat-sidebar') && window.LCOEditor) {
+    if (document.getElementById('lco-chat-sidebar')) {
       init();
     } else {
       setTimeout(waitAndInit, 300);

@@ -676,6 +676,11 @@ server.on('upgrade', (request, socket, head) => {
       ws._channel = 'terminal';
       handleTerminalConnection(ws);
     });
+  } else if (url === '/ws/claude') {
+    wss.handleUpgrade(request, socket, head, ws => {
+      ws._channel = 'claude';
+      handleClaudeConnection(ws);
+    });
   } else if (url === '/ws/file-events') {
     wss.handleUpgrade(request, socket, head, ws => {
       ws._channel = 'file-events';
@@ -891,6 +896,67 @@ function handleTerminalConnection(ws) {
 // ---------------------------------------------------------------------------
 // Mock terminal input handler (when node-pty is not available)
 // ---------------------------------------------------------------------------
+// ===========================================================================
+// Claude Chat WebSocket handler (interactive Claude Code via node-pty)
+// ===========================================================================
+function handleClaudeConnection(ws) {
+  console.log('[LCO Backend] Claude chat client connected');
+  if (!PTY_AVAILABLE || !ptySpawn) {
+    ws.send(JSON.stringify({ type: 'claude-error', data: 'node-pty not available' }));
+    ws.close();
+    return;
+  }
+  const termuxBash = '/data/data/com.termux/files/usr/bin/bash';
+  const claudeScript = '/data/data/com.termux/files/usr/bin/claude';
+  if (!fs.existsSync(claudeScript)) {
+    ws.send(JSON.stringify({ type: 'claude-error', data: 'claude not found' }));
+    ws.close();
+    return;
+  }
+  const termuxBin = '/data/data/com.termux/files/usr/bin';
+  const env = Object.assign({}, process.env, {
+    TERM: 'xterm-256color', COLORTERM: 'truecolor',
+    HOME: process.env.HOME || '/data/data/com.termux/files/home',
+    PREFIX: termuxBin.replace('/bin', ''),
+    PATH: [termuxBin, termuxBin + '/applets', '/usr/bin', '/bin', '/system/bin'].join(':'),
+    LD_LIBRARY_PATH: termuxBin.replace('/bin', '/lib'),
+    LCO_ROOT: ROOT,
+  });
+  try {
+    const pty = ptySpawn(termuxBash, [claudeScript], {
+      name: 'xterm-256color', cols: 100, rows: 30,
+      cwd: ROOT, env: env,
+    });
+    console.log('[LCO Backend] Claude PTY spawned PID:', pty.pid);
+    ws.send(JSON.stringify({ type: 'claude-ready' }));
+    pty.onData(data => {
+      if (ws.readyState === WebSocket.OPEN) wsSend(ws, { type: 'claude-output', data: data });
+    });
+    pty.onExit(({ exitCode }) => {
+      if (ws.readyState === WebSocket.OPEN) {
+        wsSend(ws, { type: 'claude-output', data: '\r\n\x1b[33m[Claude exited code ' + exitCode + ']\x1b[0m\r\n' });
+        ws.send(JSON.stringify({ type: 'claude-exit', exitCode: exitCode }));
+      }
+    });
+    ws.on('message', data => {
+      try {
+        const msg = JSON.parse(data.toString());
+        if (msg.type === 'claude-input') {
+          pty.write(msg.data);
+        } else if (msg.type === 'claude-resize' && msg.cols) {
+          try { pty.resize(msg.cols, msg.rows || 30); } catch (_) {}
+        }
+      } catch (_) { /* raw data */ }
+    });
+    ws.on('close', () => {
+      console.log('[LCO Backend] Claude chat client disconnected');
+      try { pty.kill(); } catch (_) {}
+    });
+  } catch (e) {
+    ws.send(JSON.stringify({ type: 'claude-error', data: 'PTY spawn failed: ' + e.message }));
+  }
+}
+
 function handleMockInput(ws, data) {
   // Echo the input
   ws.send(JSON.stringify({ type: 'output', data: data }));
