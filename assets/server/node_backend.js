@@ -119,11 +119,35 @@ function jsonError(id, code, message) {
 
 // ---------------------------------------------------------------------------
 // Path resolution (prevent traversal)
+// On Android /data/data/ and /data/user/0/ are the same location (symlinked).
+// Use realpath to compare physical paths, not string prefixes.
 // ---------------------------------------------------------------------------
+const ALLOWED_ROOTS = [
+  '/data/data/com.termux/files/home/lco-workspace',
+  '/data/user/0/com.termux/lco-workspace',
+  '/data/data/com.termux/files/home',
+  '/data/user/0/com.termux',
+];
+
+function isPathAllowed(targetPath) {
+  try {
+    const realTarget = fs.existsSync(targetPath) ? fs.realpathSync(targetPath) : targetPath;
+    for (const allowed of ALLOWED_ROOTS) {
+      const realAllowed = fs.existsSync(allowed) ? fs.realpathSync(allowed) : allowed;
+      if (realTarget.startsWith(realAllowed + '/') || realTarget === realAllowed) return true;
+    }
+    // Fallback: string prefix match for paths that don't exist yet
+    return ALLOWED_ROOTS.some(r => targetPath.startsWith(r + '/') || targetPath === r);
+  } catch (_) {
+    // realpathSync may fail if path doesn't exist — fall back to string check
+    return ALLOWED_ROOTS.some(r => targetPath.startsWith(r + '/') || targetPath === r);
+  }
+}
+
 function resolvePath(relativePath) {
   const normalized = relativePath.replace(/^[/\\]+/, '');
   const resolved = path.resolve(ROOT, normalized);
-  if (!resolved.startsWith(ROOT)) {
+  if (!isPathAllowed(resolved)) {
     throw new Error('Path traversal denied: ' + relativePath);
   }
   return resolved;
@@ -285,10 +309,9 @@ function dispatchRpc(id, method, params) {
           newRoot = PROJECT_ROOT;
         }
 
-        // Verify newRoot is safe (within Termux home)
-        const HOME = process.env.HOME || '/data/data/com.termux/files/home';
-        if (!newRoot.startsWith(HOME)) {
-          return jsonError(id, -32001, 'Path outside home directory: ' + newRoot);
+        // Verify newRoot is safe (within allowed workspace tree)
+        if (!isPathAllowed(newRoot)) {
+          return jsonError(id, -32001, 'Path not allowed: ' + newRoot);
         }
 
         // Send cd command to all connected terminal clients
@@ -301,6 +324,20 @@ function dispatchRpc(id, method, params) {
 
         broadcastFileTreeRefresh();
         return jsonResult(id, { ok: true, workspace: path.basename(newRoot), path: newRoot });
+      }
+
+      // ── claudeChat ──
+      case 'claudeChat': {
+        const message = (params.message || '').replace(/"/g, '\\"');
+        if (!message) return jsonError(id, -32602, 'Missing message');
+        try {
+          const stdout = execSync('claude -p "' + message + '"', {
+            cwd: ROOT, encoding: 'utf-8', timeout: 120000, maxBuffer: 10 * 1024 * 1024
+          });
+          return jsonResult(id, { response: stdout.trim() });
+        } catch (e) {
+          return jsonResult(id, { response: (e.stdout || '') + '\n' + (e.stderr || e.message) });
+        }
       }
 
       // ── Unknown ──
