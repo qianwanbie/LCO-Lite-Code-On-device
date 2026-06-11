@@ -98,8 +98,10 @@ class TermuxEngine implements IDEEngine {
 
     try {
       final request = await _http.postUrl(Uri.parse(_baseUrl));
-      request.headers.set('Content-Type', 'application/json');
-      request.write(body);
+      final bytes = utf8.encode(body);
+      request.headers.set('Content-Type', 'application/json; charset=utf-8');
+      request.headers.set('Content-Length', bytes.length.toString());
+      request.add(bytes);
       final response = await request.close();
       final raw = await response.transform(utf8.decoder).join();
       final json = jsonDecode(raw) as Map<String, dynamic>;
