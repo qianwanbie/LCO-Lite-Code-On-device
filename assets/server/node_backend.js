@@ -899,20 +899,18 @@ function handleTerminalConnection(ws) {
 // ===========================================================================
 // Claude Chat WebSocket handler (interactive Claude Code via node-pty)
 // ===========================================================================
+// Persistent Claude PTY — reused across WebSocket reconnects
+let claudePty = null;
+let claudeBashReady = false;
+
 function handleClaudeConnection(ws) {
   console.log('[LCO Backend] Claude chat client connected');
   if (!PTY_AVAILABLE || !ptySpawn) {
     ws.send(JSON.stringify({ type: 'claude-error', data: 'node-pty not available' }));
-    ws.close();
-    return;
+    ws.close(); return;
   }
   const termuxBash = '/data/data/com.termux/files/usr/bin/bash';
   const claudeScript = '/data/data/com.termux/files/usr/bin/claude';
-  if (!fs.existsSync(claudeScript)) {
-    ws.send(JSON.stringify({ type: 'claude-error', data: 'claude not found' }));
-    ws.close();
-    return;
-  }
   const termuxBin = '/data/data/com.termux/files/usr/bin';
   const env = Object.assign({}, process.env, {
     TERM: 'xterm-256color', COLORTERM: 'truecolor',
@@ -922,49 +920,59 @@ function handleClaudeConnection(ws) {
     LD_LIBRARY_PATH: termuxBin.replace('/bin', '/lib'),
     LCO_ROOT: ROOT,
   });
+
+  // Handle incoming messages from this WS client
+  ws.on('message', data => {
+    try {
+      const msg = JSON.parse(data.toString());
+      if (msg.type === 'claude-input' && claudePty) {
+        claudePty.write(msg.data);
+      }
+    } catch (_) {}
+  });
+
+  ws.on('close', () => {
+    console.log('[LCO Backend] Claude client disconnected (PTY stays)');
+  });
+
+  // Reuse existing PTY if alive
+  if (claudePty) {
+    console.log('[LCO Backend] Reusing existing Claude PTY');
+    ws.send(JSON.stringify({ type: 'claude-ready' }));
+    wsSend(ws, { type: 'claude-output', data: '\r\n\x1b[33m[Reconnected]\x1b[0m\r\n' });
+    // Attach output listener for this client
+    claudePty.onData(function onD(data) {
+      if (ws.readyState === WebSocket.OPEN) wsSend(ws, { type: 'claude-output', data: data });
+    });
+    return;
+  }
+
+  // Spawn new bash login shell
   try {
-    // Run claude via bash to get proper glibc/termux environment
-    const pty = ptySpawn(termuxBash, [claudeScript], {
+    claudeBashReady = false;
+    claudePty = ptySpawn(termuxBash, ['-l'], {
       name: 'xterm-256color', cols: 100, rows: 30,
       cwd: ROOT, env: env,
     });
-    console.log('[LCO Backend] Claude PTY spawned PID:', pty.pid);
+    console.log('[LCO Backend] Claude bash PTY spawned PID:', claudePty.pid);
     ws.send(JSON.stringify({ type: 'claude-ready' }));
-    pty.onData(data => {
-      if (ws.readyState === WebSocket.OPEN) {
-        wsSend(ws, { type: 'claude-output', data: data });
-      }
+
+    // Forward PTY output
+    claudePty.onData(function onD(data) {
+      if (ws.readyState === WebSocket.OPEN) wsSend(ws, { type: 'claude-output', data: data });
     });
-    // Log any stderr output
-    let stderrAcc = '';
-    pty.onData(data => {
-      if (data.indexOf('\x1b') === -1 && data.trim()) {
-        stderrAcc += data;
-      }
-    });
-    pty.onExit(({ exitCode, signal }) => {
+
+    claudePty.onExit(({ exitCode, signal }) => {
       console.log('[LCO Backend] Claude PTY exited code', exitCode, 'signal', signal);
-      if (ws.readyState === WebSocket.OPEN) {
-        wsSend(ws, { type: 'claude-output', data: '\r\n\x1b[33m[Claude exited code ' + exitCode + ']\x1b[0m\r\n' });
-        ws.send(JSON.stringify({ type: 'claude-exit', exitCode: exitCode }));
-      }
+      claudePty = null; claudeBashReady = false;
     });
-    ws.on('message', data => {
-      try {
-        const msg = JSON.parse(data.toString());
-        if (msg.type === 'claude-input') {
-          pty.write(msg.data);
-        } else if (msg.type === 'claude-resize' && msg.cols) {
-          try { pty.resize(msg.cols, msg.rows || 30); } catch (_) {}
-        }
-      } catch (_) { /* raw data */ }
-    });
-    ws.on('close', () => {
-      console.log('[LCO Backend] Claude chat client disconnected');
-      try { pty.kill(); } catch (_) {}
-    });
+
+    // Wait for bash prompt, then launch claude
+    setTimeout(() => {
+      if (claudePty) { claudePty.write('claude\r'); claudeBashReady = true; }
+    }, 1000);
   } catch (e) {
-    ws.send(JSON.stringify({ type: 'claude-error', data: 'PTY spawn failed: ' + e.message }));
+    ws.send(JSON.stringify({ type: 'claude-error', data: 'Spawn failed: ' + e.message }));
   }
 }
 
