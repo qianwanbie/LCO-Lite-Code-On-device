@@ -169,6 +169,45 @@ function checksum(content) {
 }
 
 // ---------------------------------------------------------------------------
+// Workspace context — file tree snapshot for LLM prompt injection
+// ---------------------------------------------------------------------------
+function getWorkspaceContext() {
+  const lines = [];
+  lines.push('You are an AI coding assistant integrated into LCO IDE.');
+  lines.push('Current workspace: ' + ROOT);
+  lines.push('');
+  lines.push('## File Tree');
+  try {
+    _walkDir(ROOT, '', lines, 2);
+  } catch (_) {
+    lines.push('(unable to read directory)');
+  }
+  lines.push('');
+  lines.push('## Available Tools');
+  lines.push('You can instruct the IDE to perform these actions:');
+  lines.push('- Create file: respond with ```file:path\\ncontent```');
+  lines.push('- Run command: respond with ```shell:command```');
+  lines.push('- The IDE will auto-execute file creation and refresh the explorer.');
+  return lines.join('\n');
+}
+
+function _walkDir(basePath, relPath, lines, depth) {
+  if (depth <= 0) return;
+  const fullPath = path.join(basePath, relPath);
+  const entries = fs.readdirSync(fullPath, { withFileTypes: true })
+    .filter(e => !e.name.startsWith('.') || e.name === '.claude');
+  for (const e of entries) {
+    const indent = '  '.repeat(4 - depth);
+    if (e.isDirectory()) {
+      lines.push(indent + '▸ ' + e.name + '/');
+      _walkDir(fullPath, e.name, lines, depth - 1);
+    } else {
+      lines.push(indent + '  ' + e.name);
+    }
+  }
+}
+
+// ---------------------------------------------------------------------------
 // LLM Adapter — reads llm_config.json, calls provider API
 // ---------------------------------------------------------------------------
 const LLM_CONFIG_PATH = path.join(ROOT, 'llm_config.json');
@@ -452,11 +491,37 @@ async function dispatchRpc(id, method, params) {
         return jsonResult(id, { ok: true, workspace: path.basename(newRoot), path: newRoot });
       }
 
-      // ── claudeChat / chatMessage ──
+      // ── mkdir ──
+      case 'mkdir':
+      case 'tools.mkdir': {
+        const dirPath = resolvePath(params.path || '');
+        if (fs.existsSync(dirPath)) {
+          return jsonError(id, -32602, 'Already exists: ' + params.path);
+        }
+        fs.mkdirSync(dirPath, { recursive: true });
+        broadcastFileTreeRefresh();
+        return jsonResult(id, { ok: true, path: params.path });
+      }
+
+      // ── Tool aliases (MCP-style naming) ──
+      case 'tools.writeFile':
+        return await dispatchRpc(id, 'saveFile',
+          { path: params.path || params.filePath, content: params.content });
+      case 'tools.readFile':
+        return await dispatchRpc(id, 'readFile',
+          { path: params.path || params.filePath });
+      case 'tools.listDirectory':
+        return await dispatchRpc(id, 'listFiles',
+          { dirPath: params.path || params.dirPath });
+
+      // ── claudeChat ──
       case 'claudeChat':
       case 'chatMessage': {
-        const message = params.message || '';
+        let message = params.message || '';
         if (!message) return jsonError(id, -32602, 'Missing message');
+        // Inject workspace context: file tree snapshot + current directory
+        const ctx = getWorkspaceContext();
+        message = ctx + '\n\n---\nUser: ' + message;
         const cfg = loadLLMConfig();
         const response = await new Promise((resolve) => {
           chatWithLLM(cfg, message, (err, text) => {
