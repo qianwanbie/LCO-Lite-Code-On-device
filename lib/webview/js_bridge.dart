@@ -145,8 +145,10 @@ class JSBridge {
             [];
         return _withId(await _engine.runGitCommand(args), id);
 
+      case 'switchWorkspace':
       case 'changeWorkspace':
-        final subFolder = _normalizePath(params['subFolder'] as String? ?? '');
+        // Support both subFolder (relative) and path (absolute)
+        final subFolder = _normalizePath(params['subFolder'] as String? ?? params['path'] as String? ?? '');
         return _withId(await _engine.changeWorkspace(subFolder), id);
 
       case 'deleteFile':

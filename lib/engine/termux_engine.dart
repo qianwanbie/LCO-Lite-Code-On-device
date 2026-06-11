@@ -53,7 +53,8 @@ class TermuxEngine implements IDEEngine {
 
   @override
   Future<JsonRpcResponse> changeWorkspace(String subFolder) =>
-      _sendRpc('changeWorkspace', {'subFolder': subFolder});
+      _sendRpc('switchWorkspace',
+          subFolder.startsWith('/') ? {'path': subFolder} : {'subFolder': subFolder});
 
   @override
   Future<JsonRpcResponse> deleteFile(String path) =>
