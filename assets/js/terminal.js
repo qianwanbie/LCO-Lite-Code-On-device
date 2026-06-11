@@ -237,6 +237,12 @@
           terminal.write(msg.data);
         } else if (msg.type === 'error') {
           terminal.write('\x1b[31m' + msg.data + '\x1b[0m');
+        } else if (msg.type === 'cd') {
+          // Server requests terminal to cd — send as input to PTY
+          if (msg.path) {
+            ws.send(JSON.stringify({ type: 'input', data: 'cd "' + msg.path + '"\r' }));
+            ws.send(JSON.stringify({ type: 'input', data: 'clear\r' }));
+          }
         } else if (msg.type === 'terminalOutput') {
           // Output from runScript — display with a header
           terminal.write('\r\n\x1b[90m── Output of ' + (msg.path || 'script') + ' ──\x1b[0m\r\n');

@@ -460,6 +460,8 @@
 
     // Initial load
     refresh();
+    // Check Claude context on startup
+    setTimeout(function () { checkClaudeConfig(currentWorkspace); }, 1000);
 
     console.log('[FileExplorer] Initialized');
   }
@@ -471,6 +473,7 @@
   function initWorkspaceBar() {
     var btnNew = document.getElementById('lco-btn-new-project');
     var btnSwitch = document.getElementById('lco-btn-switch-project');
+    var btnHome = document.getElementById('lco-btn-home');
     var btnClose = document.getElementById('lco-modal-close');
     var btnCancel = document.getElementById('lco-modal-cancel');
     var btnConfirm = document.getElementById('lco-modal-confirm');
@@ -478,6 +481,7 @@
 
     if (btnNew) btnNew.addEventListener('click', function () { openModal('new'); });
     if (btnSwitch) btnSwitch.addEventListener('click', function () { openModal('switch'); });
+    if (btnHome) btnHome.addEventListener('click', switchToHome);
     if (btnClose) btnClose.addEventListener('click', closeModal);
     if (btnCancel) btnCancel.addEventListener('click', closeModal);
     if (btnConfirm) btnConfirm.addEventListener('click', handleModalConfirm);
@@ -577,17 +581,48 @@
   function switchWorkspace(folderName) {
     currentWorkspace = folderName;
     document.getElementById('lco-workspace-name').textContent = folderName;
-    // Notify backend to change workspace root
-    window.LCOEditor.sendRpc('changeWorkspace', { subFolder: folderName }).then(function () {
+    window.LCOEditor.sendRpc('switchWorkspace', { subFolder: folderName }).then(function (result) {
       updateStatus('⇄ Switched to: ' + folderName);
+      checkClaudeConfig(result.path || folderName);
       refresh();
     }).catch(function (err) {
       updateStatus('✗ Switch failed: ' + err.message, 'error');
     });
   }
 
+  function switchToHome() {
+    currentWorkspace = 'home';
+    document.getElementById('lco-workspace-name').textContent = 'home';
+    window.LCOEditor.sendRpc('switchWorkspace', { path: '' }).then(function () {
+      updateStatus('⌂ Back to home');
+      checkClaudeConfig('');
+      refresh();
+    }).catch(function (err) {
+      updateStatus('✗ ' + err.message, 'error');
+    });
+  }
+
+  function checkClaudeConfig(wsPath) {
+    var badge = document.getElementById('lco-claude-badge');
+    if (!badge) return;
+    // Check if .claude directory exists in current workspace
+    window.LCOEditor.sendRpc('listFiles', { dirPath: '/' }).then(function (result) {
+      var files = (result && result.files) ? result.files : [];
+      var hasClaude = files.some(function (f) { return f.name === '.claude'; });
+      if (hasClaude) {
+        badge.classList.remove('hidden');
+        badge.title = 'Claude context: ' + (wsPath || currentWorkspace);
+      } else {
+        badge.classList.add('hidden');
+      }
+    }).catch(function () {
+      badge.classList.add('hidden');
+    });
+  }
+
   function refreshWorkspaceName() {
     document.getElementById('lco-workspace-name').textContent = currentWorkspace;
+    checkClaudeConfig(currentWorkspace);
   }
 
   // ── End Workspace Bar ──

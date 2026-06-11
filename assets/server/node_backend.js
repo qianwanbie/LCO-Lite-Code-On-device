@@ -266,19 +266,41 @@ function dispatchRpc(id, method, params) {
         return jsonResult(id, { ok: true, path: params.path, running: true });
       }
 
-      // ── changeWorkspace ──
+      // ── switchWorkspace (new) / changeWorkspace (legacy) ──
+      case 'switchWorkspace':
       case 'changeWorkspace': {
+        let newRoot;
         const subFolder = (params.subFolder || '').replace(/^[/\\]+/, '').replace(/\.\./g, '');
-        if (!subFolder) return jsonError(id, -32602, 'Missing subFolder');
-        const newRoot = path.join(PROJECT_ROOT, subFolder);
-        if (!fs.existsSync(newRoot)) {
-          return jsonError(id, -32002, 'Project not found: ' + subFolder);
+        const absolutePath = (params.path || '').replace(/\.\./g, '');
+
+        if (absolutePath && fs.existsSync(absolutePath)) {
+          newRoot = absolutePath;
+        } else if (subFolder) {
+          newRoot = path.join(PROJECT_ROOT, subFolder);
+          if (!fs.existsSync(newRoot)) {
+            return jsonError(id, -32002, 'Project not found: ' + subFolder);
+          }
+        } else {
+          // Reset to home / PROJECT_ROOT
+          newRoot = PROJECT_ROOT;
         }
-        // Update global ROOT (affects terminal cwd on next connect)
-        // Note: requires server restart or dynamic ROOT update for full effect
-        // For now, broadcast refresh so frontend re-lists from new path
+
+        // Verify newRoot is safe (within Termux home)
+        const HOME = process.env.HOME || '/data/data/com.termux/files/home';
+        if (!newRoot.startsWith(HOME)) {
+          return jsonError(id, -32001, 'Path outside home directory: ' + newRoot);
+        }
+
+        // Send cd command to all connected terminal clients
+        const cdPayload = JSON.stringify({ type: 'cd', path: newRoot });
+        wss.clients.forEach(client => {
+          if (client.readyState === WebSocket.OPEN && client._channel === 'terminal') {
+            client.send(cdPayload);
+          }
+        });
+
         broadcastFileTreeRefresh();
-        return jsonResult(id, { ok: true, workspace: subFolder, path: newRoot });
+        return jsonResult(id, { ok: true, workspace: path.basename(newRoot), path: newRoot });
       }
 
       // ── Unknown ──

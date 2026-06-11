@@ -108,6 +108,11 @@ html, body {
   transition: color 0.15s, background 0.15s;
 }
 #lco-workspace-bar button:hover { color: var(--lco-text); background: #3e3e42; }
+.claude-badge {
+  font-size: 13px; color: #d4a574; margin-left: 4px;
+  font-weight: bold; cursor: help;
+}
+.claude-badge.hidden { display: none; }
 
 /* ── Modal ── */
 .modal-overlay {
