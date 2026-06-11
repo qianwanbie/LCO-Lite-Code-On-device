@@ -1,0 +1,76 @@
+# LCO Project Requirements
+
+## Development Environment
+
+| Requirement | Version | Notes |
+|---|---|---|
+| Flutter SDK | ≥ 3.44.1 | Dart 3.12.1 included |
+| Android SDK | ≥ 35 (API 36 recommended) | Build tools, platform tools |
+| Java (JDK) | ≥ 17 | OpenJDK Temurin-17 recommended |
+| Kotlin | 2.2.20 | Bundled with AGP |
+| Gradle | 8.14 | Local distribution (file://) |
+| Android Gradle Plugin (AGP) | 8.11.1 | Matches Flutter SDK compileOnly |
+| NDK | 28.2.13676358 | Required by jni plugin |
+| Node.js | ≥ 18 | For local asset preparation |
+| npm | ≥ 9 | For Monaco download |
+
+## Android Device Requirements
+
+| Requirement | Min | Recommended |
+|---|---|---|
+| Android Version | API 24 (Android 7.0) | API 36 (Android 16) |
+| Architecture | ARM64 (arm64-v8a) | |
+| RAM | 2 GB | 4 GB+ |
+| Storage | 500 MB | 1 GB+ |
+| WebView | Android System WebView ≥ 89 | Latest |
+| Termux | Latest (F-Droid) | For Phase 2 backend |
+
+## Flutter Dependencies (pubspec.yaml)
+
+```yaml
+dependencies:
+  flutter:
+    sdk: flutter
+  webview_flutter: ^4.13.1
+  path_provider: ^2.1.5
+  permission_handler: ^11.4.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^4.0.0
+```
+
+## Node.js Dependencies (Termux Backend)
+
+```json
+{
+  "dependencies": {
+    "ws": "latest",
+    "node-pty": "1.1.0"
+  }
+}
+```
+
+## Termux Build Dependencies
+
+```bash
+pkg install clang make python binutils nodejs -y
+```
+
+## Browser/WebView Runtime Dependencies
+
+| Library | Version | Source |
+|---|---|---|
+| Monaco Editor | 0.55.1 | Local bundle + jsDelivr CDN |
+| xterm.js | 5.5.0 | jsDelivr CDN |
+| xterm-addon-fit | 0.10.0 | jsDelivr CDN |
+| xterm-addon-web-links | 0.11.0 | jsDelivr CDN |
+
+## Optional Dependencies
+
+| Package | Purpose |
+|---|---|
+| node-gyp | Native module compilation (for node-pty) |
+| git (Termux) | Git integration via `runGitCommand` |
+| python | node-gyp dependency |

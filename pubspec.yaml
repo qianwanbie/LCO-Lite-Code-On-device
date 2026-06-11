@@ -1,0 +1,39 @@
+name: lco
+description: Lite Code On-device - A lightweight Android IDE powered by Monaco Editor.
+publish_to: 'none'
+version: 0.1.0+1
+
+environment:
+  sdk: '>=3.2.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  webview_flutter: ^4.8.0
+  path_provider: ^2.1.4
+  permission_handler: ^11.3.1
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^4.0.0
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/config.json
+    - assets/index.html
+    - assets/css/lco.css
+    - assets/js/editor.js
+    - assets/js/i18n.js
+    - assets/js/file-explorer.js
+    - assets/js/terminal.js
+    - assets/monaco-editor/min/vs/
+    - assets/monaco-editor/min/vs/editor/
+    - assets/monaco-editor/min/vs/assets/
+    - assets/monaco-editor/min/vs/basic-languages/
+    - assets/server/node_backend.js
+    - assets/vendor/xterm/xterm.js
+    - assets/vendor/xterm/xterm.css
+    - assets/vendor/xterm/addon-fit.js
+    - assets/vendor/xterm/addon-web-links.js

@@ -1,0 +1,345 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0,
+        maximum-scale=1.0, user-scalable=no">
+  <title>LCO — Lite Code On-device</title>
+
+  <!-- LCO layout & component styles -->
+  <link rel="stylesheet" href="css/lco.css">
+
+  <!-- xterm.js stylesheet (local) -->
+  <link rel="stylesheet" href="vendor/xterm/xterm.css" />
+</head>
+<body>
+
+  <!-- ================================================================= -->
+  <!-- Loading Overlay                                                    -->
+  <!-- ================================================================= -->
+  <div id="loading-overlay">
+    <div class="spinner"></div>
+    <div id="loading-text">Loading Monaco Editor…</div>
+  </div>
+
+  <!-- ================================================================= -->
+  <!-- Context Menu (hidden, shown on right-click in file explorer)       -->
+  <!-- ================================================================= -->
+  <div id="lco-context-menu" class="hidden"></div>
+
+  <!-- ================================================================= -->
+  <!-- App Shell                                                          -->
+  <!-- ================================================================= -->
+  <div id="lco-app">
+
+    <!-- ── Body: Sidebar + Main Area ── -->
+    <div id="lco-body">
+
+      <!-- ◆◆◆ Left Sidebar — File Explorer ◆◆◆ -->
+      <div id="lco-sidebar">
+        <!-- Workspace toolbar -->
+        <div id="lco-workspace-bar">
+          <span id="lco-workspace-name" title="Current workspace">lco-workspace</span>
+          <span class="workspace-actions">
+            <button id="lco-btn-new-project" title="New Project">+</button>
+            <button id="lco-btn-switch-project" title="Switch Project">⇄</button>
+          </span>
+        </div>
+        <div id="lco-sidebar-header">
+          <span>EXPLORER</span>
+          <span class="refresh-btn" id="lco-refresh-explorer" title="Refresh">↻</span>
+        </div>
+        <div id="file-explorer-tree"></div>
+      </div>
+
+      <!-- Workspace Modal (hidden) -->
+      <div id="lco-workspace-modal" class="modal-overlay hidden">
+        <div class="modal-box">
+          <div class="modal-header">
+            <span id="lco-modal-title">New Project</span>
+            <button id="lco-modal-close" class="close-btn">✕</button>
+          </div>
+          <div class="modal-body" id="lco-modal-body">
+            <!-- Filled dynamically -->
+          </div>
+          <div class="modal-footer">
+            <button id="lco-modal-cancel">Cancel</button>
+            <button id="lco-modal-confirm" class="primary">Create</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- ◆◆◆ Main Area — Editor + Terminal ◆◆◆ -->
+      <div id="lco-main-area">
+
+        <!-- Monaco Editor -->
+        <div id="editor-container"></div>
+
+        <!-- Integrated Terminal Panel -->
+        <div id="lco-terminal-panel">
+          <div id="lco-terminal-header">
+            <span id="lco-terminal-header-text">TERMINAL</span>
+            <span class="terminal-actions">
+              <button id="lco-terminal-max" title="Maximize/Restore">◻</button>
+              <button id="lco-terminal-clear" title="Clear">⌧</button>
+              <button id="lco-terminal-close" class="close-btn" title="Collapse">✕</button>
+            </span>
+          </div>
+          <div id="terminal-container"></div>
+        </div>
+
+      </div><!-- /lco-main-area -->
+
+    </div><!-- /lco-body -->
+
+    <!-- ── Status Bar ── -->
+    <div id="lco-status-bar">LCO — Lite Code On-device</div>
+
+  </div><!-- /lco-app -->
+
+  <!-- ================================================================= -->
+  <!-- Floating Toolbar                                                   -->
+  <!-- ================================================================= -->
+  <div id="lco-toolbar" class="hidden">
+    <button id="lco-btn-test" class="test-btn" title="Test readFile → display">▶ Test</button>
+    <button id="lco-btn-save" class="save-btn" title="Save (Ctrl+S)">💾 Save</button>
+    <button id="lco-btn-locale" class="locale-btn" title="Toggle language">EN</button>
+    <button id="lco-btn-git" class="git-btn" title="Run git status">⎇ Git</button>
+  </div>
+
+  <!-- ================================================================= -->
+  <!-- Scripts                                                            -->
+  <!-- ================================================================= -->
+
+  <!-- i18n (no deps, load early) -->
+  <script src="js/i18n.js"></script>
+
+  <!-- Inline config (avoids CORS issue with file:/// XHR in WebView) -->
+  <script>
+    window.LCO_CONFIG = {
+      locale: 'en',
+      autosave: { enabled: true, debounceMs: 1000 },
+      monaco: {
+        cdnPath: 'https://cdn.jsdelivr.net/npm/monaco-editor@0.55.1/min/vs'
+      }
+    };
+  </script>
+
+  <!-- Monaco path config — try local first, CDN on error -->
+  <script>
+    var LCO_MONACO_LOCAL_PATH = './monaco-editor/min/vs';
+    var LCO_MONACO_CDN_PATH   = 'https://cdn.jsdelivr.net/npm/monaco-editor@0.55.1/min/vs';
+    var LCO_MONACO_USE_CDN    = false;
+  </script>
+
+  <!-- RequireJS + Monaco bootstrap — tries local, falls back to CDN -->
+  <script>
+    bootstrapMonaco();
+
+    function bootstrapMonaco() {
+      // Loaded via local HTTP server → proper origin, no CORS issues
+      tryLocalFirst();
+    }
+
+    function tryLocalFirst() {
+      // Kept for future if local loading works on some devices
+      var script = document.createElement('script');
+      script.src = LCO_MONACO_LOCAL_PATH + '/loader.js';
+      script.onload = function() {
+        console.log('[LCO] Local require.js OK');
+        LCO_MONACO_USE_CDN = false;
+        require.config({ paths: { vs: LCO_MONACO_LOCAL_PATH } });
+        loadMonaco();
+      };
+      script.onerror = function() {
+        console.warn('[LCO] Local require.js FAILED, trying CDN...');
+        tryCdn();
+      };
+      document.head.appendChild(script);
+    }
+
+    function tryCdn() {
+      var script = document.createElement('script');
+      script.src = LCO_MONACO_CDN_PATH + '/loader.js';
+      script.onload = function() {
+        console.log('[LCO] CDN require.js OK');
+        LCO_MONACO_USE_CDN = true;
+        require.config({ paths: { vs: LCO_MONACO_CDN_PATH } });
+        loadMonaco();
+      };
+      script.onerror = function() {
+        console.error('[LCO] CDN require.js ALSO FAILED');
+        document.getElementById('loading-text').textContent =
+          'Failed to load Monaco Editor. Check network.';
+      };
+      document.head.appendChild(script);
+    }
+
+    function loadMonaco() {
+      // Hide loading overlay on successful load
+      function onReady() {
+        console.log('[LCO] Monaco Editor ready');
+        window.LCOMonacoReady = true;
+        // Force-hide loading overlay (direct style, no CSS dependency)
+        var lo = document.getElementById('loading-overlay');
+        if (lo) { lo.style.display = 'none'; lo.classList.add('hidden'); }
+        var toolbar = document.getElementById('lco-toolbar');
+        if (toolbar) toolbar.style.display = '';
+        var sb = document.getElementById('lco-status-bar');
+        if (sb) sb.textContent = '● Monaco Editor ready';
+      }
+
+      require(['vs/editor/editor.main'], function() {
+        onReady();
+        loadScript('js/editor.js', function() {
+          console.log('[LCO] Editor adapter loaded.');
+        });
+      }, function(err) {
+        console.error('[LCO] require failed:', err);
+        if (!LCO_MONACO_USE_CDN) {
+          // Local failed → retry with CDN (but don't reload loader.js, just change paths)
+          console.warn('[LCO] Local require failed, switching to CDN...');
+          LCO_MONACO_USE_CDN = true;
+          // Undefine any partially loaded modules
+          if (typeof requirejs !== 'undefined' && requirejs.undef) {
+            requirejs.undef('vs/editor/editor.main');
+          }
+          require.config({ paths: { vs: LCO_MONACO_CDN_PATH } });
+          try {
+            require(['vs/editor/editor.main'], function() {
+              onReady();
+              loadScript('js/editor.js', function() {
+                console.log('[LCO] Editor adapter loaded.');
+              });
+            }, function(err2) {
+              document.getElementById('loading-text').textContent =
+                'Failed to load Monaco Editor (CDN).';
+              console.error('[LCO] CDN also failed:', err2);
+            });
+          } catch(e) {
+            document.getElementById('loading-text').textContent =
+              'Monaco error: ' + e.message;
+          }
+        } else {
+          document.getElementById('loading-text').textContent =
+            'Failed to load Monaco Editor.';
+        }
+      });
+    }
+
+    function loadScript(src, cb) {
+      var s = document.createElement('script');
+      s.src = src;
+      s.onload = cb || function(){};
+      document.head.appendChild(s);
+    }
+  </script>
+
+  <!-- xterm.js + addons (local primary, CDN fallback) -->
+  <script src="vendor/xterm/xterm.js"></script>
+  <script>window._xterm_local_ok = (typeof Terminal !== 'undefined'); if(!window._xterm_local_ok){ document.write('<script src="https://cdn.jsdelivr.net/npm/@xterm/xterm@5.5.0/lib/xterm.js"><\/script>'); }</script>
+  <script src="vendor/xterm/addon-fit.js"></script>
+  <script>window._fit_local_ok = (typeof FitAddon !== 'undefined'); if(!window._fit_local_ok){ document.write('<script src="https://cdn.jsdelivr.net/npm/@xterm/addon-fit@0.10.0/lib/addon-fit.js"><\/script>'); }</script>
+  <script src="vendor/xterm/addon-web-links.js"></script>
+  <script>window._weblinks_local_ok = (typeof WebLinksAddon !== 'undefined'); if(!window._weblinks_local_ok){ document.write('<script src="https://cdn.jsdelivr.net/npm/@xterm/addon-web-links@0.11.0/lib/addon-web-links.js"><\/script>'); }</script>
+
+  <!-- LCO components (loaded after Monaco and xterm are available) -->
+  <script src="js/file-explorer.js"></script>
+  <script src="js/terminal.js"></script>
+
+  <!-- Sidebar resize drag handle -->
+  <script>
+    (function() {
+      var sidebar = document.getElementById('lco-sidebar');
+      var resizeHandle = null;
+      var terminalHeader = null;
+      var startX, startY, startWidth, startHeight;
+
+      function initResize() {
+        if (!sidebar) { setTimeout(initResize, 200); return; }
+
+        // Create sidebar resize handle.
+        resizeHandle = document.createElement('div');
+        resizeHandle.id = 'lco-sidebar-resize';
+        document.getElementById('lco-body').appendChild(resizeHandle);
+
+        resizeHandle.addEventListener('mousedown', function(e) {
+          e.preventDefault();
+          startX = e.clientX;
+          startWidth = sidebar.offsetWidth;
+          resizeHandle.classList.add('active');
+        });
+
+        // Terminal resize via header drag.
+        terminalHeader = document.getElementById('lco-terminal-header');
+        if (terminalHeader) {
+          terminalHeader.addEventListener('mousedown', function(e) {
+            if (e.target.tagName === 'BUTTON') return; // Don't intercept button clicks.
+            e.preventDefault();
+            startY = e.clientY;
+            var panel = document.getElementById('lco-terminal-panel');
+            startHeight = panel ? panel.offsetHeight : 200;
+            terminalHeader.classList.add('active');
+          });
+        }
+
+        document.addEventListener('mousemove', function(e) {
+          // Sidebar resize
+          if (resizeHandle && resizeHandle.classList.contains('active')) {
+            var newWidth = startWidth + (e.clientX - startX);
+            newWidth = Math.max(50, Math.min(400, newWidth));
+            sidebar.style.width = newWidth + 'px';
+          }
+          // Terminal resize
+          if (terminalHeader && terminalHeader.classList.contains('active')) {
+            var newHeight = startHeight + (startY - e.clientY);
+            newHeight = Math.max(40, Math.min(window.innerHeight * 0.6, newHeight));
+            var panel = document.getElementById('lco-terminal-panel');
+            if (panel) panel.style.height = newHeight + 'px';
+            window.dispatchEvent(new CustomEvent('lco-terminal-resized'));
+          }
+        });
+
+        document.addEventListener('mouseup', function() {
+          if (resizeHandle) resizeHandle.classList.remove('active');
+          if (terminalHeader) terminalHeader.classList.remove('active');
+        });
+
+        // Touch support for mobile.
+        resizeHandle.addEventListener('touchstart', function(e) {
+          startX = e.touches[0].clientX;
+          startWidth = sidebar.offsetWidth;
+        });
+        resizeHandle.addEventListener('touchmove', function(e) {
+          var newWidth = startWidth + (e.touches[0].clientX - startX);
+          newWidth = Math.max(50, Math.min(400, newWidth));
+          sidebar.style.width = newWidth + 'px';
+        });
+
+        if (terminalHeader) {
+          terminalHeader.addEventListener('touchstart', function(e) {
+            if (e.target.tagName === 'BUTTON') return;
+            startY = e.touches[0].clientY;
+            var panel = document.getElementById('lco-terminal-panel');
+            startHeight = panel ? panel.offsetHeight : 200;
+          });
+          terminalHeader.addEventListener('touchmove', function(e) {
+            var newHeight = startHeight + (startY - e.touches[0].clientY);
+            newHeight = Math.max(40, Math.min(window.innerHeight * 0.6, newHeight));
+            var panel = document.getElementById('lco-terminal-panel');
+            if (panel) panel.style.height = newHeight + 'px';
+            window.dispatchEvent(new CustomEvent('lco-terminal-resized'));
+          });
+        }
+      }
+
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', initResize);
+      } else {
+        initResize();
+      }
+    })();
+  </script>
+
+</body>
+</html>

@@ -1,0 +1,36 @@
+# Flutter/Dart
+.dart_tool/
+.packages
+build/
+*.iml
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Android
+android/local.properties
+android/app/build/
+android/.gradle/
+android/build/
+android/captures/
+android/gradle/wrapper/gradle-wrapper.jar
+*.apk
+*.aab
+*.keystore
+!gradle/wrapper/gradle-wrapper.jar
+
+# IDE/Editor
+.idea/
+*.iml
+.vscode/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# LCO
+assets/monaco-editor/    # Monaco Editor offline bundle (large, excluded from git)
+assets/vendor/           # xterm.js offline bundle (downloaded, excluded)
+flutter/                 # Flutter SDK (not part of this project)
+pubspec.lock

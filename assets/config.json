@@ -1,0 +1,26 @@
+{
+  "theme": {
+    "base": "vs-dark",
+    "primaryColor": "#007acc",
+    "backgroundColor": "#1e1e1e",
+    "editorFontFamily": "'Cascadia Code', 'Fira Code', 'Consolas', monospace",
+    "editorFontSize": 14,
+    "editorTabSize": 2,
+    "editorWordWrap": "on",
+    "editorMinimap": false
+  },
+  "locale": "en",
+  "autosave": {
+    "enabled": true,
+    "debounceMs": 1000
+  },
+  "monaco": {
+    "cdnFallbackVersion": "0.55.1",
+    "localPath": "./monaco-editor/min/vs",
+    "cdnPath": "https://cdn.jsdelivr.net/npm/monaco-editor@0.55.1/min/vs"
+  },
+  "engine": {
+    "mockDataDir": "lco-mock",
+    "rpcTimeoutMs": 30000
+  }
+}
