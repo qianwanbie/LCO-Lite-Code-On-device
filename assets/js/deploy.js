@@ -26,6 +26,9 @@
     allBtn = document.getElementById('lco-deploy-all');
     if (!modal) { setTimeout(init, 500); return; }
 
+    // ── Welcome modal (first launch setup guide) ──
+    initWelcome();
+
     document.getElementById('lco-deploy-close')?.addEventListener('click', hide);
     modal.addEventListener('click', function (e) { if (e.target === modal) hide(); });
 
@@ -87,7 +90,49 @@
     });
   }
 
-  // Auto-show if backend is ready but deployment not done
+  // ── Welcome Modal (first-launch setup guide) ──
+  function initWelcome() {
+    var wm = document.getElementById('lco-welcome-modal');
+    var copyBtn = document.getElementById('lco-copy-cmd');
+    var checkBtn = document.getElementById('lco-welcome-check');
+    var statusEl = document.getElementById('lco-welcome-status');
+    if (!wm) return;
+
+    if (copyBtn) {
+      copyBtn.addEventListener('click', function () {
+        var cmd = document.getElementById('lco-setup-cmd');
+        if (cmd) {
+          navigator.clipboard.writeText(cmd.textContent).then(function () {
+            copyBtn.textContent = 'Copied!';
+            setTimeout(function () { copyBtn.textContent = 'Copy'; }, 2000);
+          });
+        }
+      });
+    }
+
+    if (checkBtn) {
+      checkBtn.addEventListener('click', function () {
+        if (statusEl) statusEl.textContent = 'Checking...';
+        window.LCOEditor.sendRpc('deployStatus', {}).then(function () {
+          if (statusEl) statusEl.textContent = 'Connected! Loading tools...';
+          wm.classList.add('hidden');
+          // Now show deployment center
+          if (modal) modal.classList.remove('hidden');
+        }).catch(function () {
+          if (statusEl) statusEl.textContent = 'Not connected yet. Run the command in Termux first.';
+        });
+      });
+    }
+
+    // Show on first launch if backend not reachable
+    window.LCOEditor.sendRpc('deployStatus', {}).then(function () {
+      wm.classList.add('hidden'); // Already connected
+    }).catch(function () {
+      wm.classList.remove('hidden'); // Show setup guide
+    });
+  }
+
+  // Auto-show deployment if ready
   function checkAndShow() {
     if (!window.LCOEditor || !window.LCOEditor.sendRpc) { setTimeout(checkAndShow, 1000); return; }
     window.LCOEditor.sendRpc('deployStatus', {}).then(function (r) {
