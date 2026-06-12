@@ -641,26 +641,29 @@ async function dispatchRpc(id, method, params) {
       case 'deployInstall': {
         const tools = params.tools || [];
         if (!tools.length) return jsonError(id, -32602, 'No tools selected');
+        const aptBin = '/data/data/com.termux/files/usr/bin/apt';
         const toolMap = {
-          git:     'pkg install git -y',
-          python:  'pkg install python -y',
-          node:    'pkg install nodejs -y',
-          clang:   'pkg install clang make -y',
-          claude:  'npm install -g @anthropic-ai/claude-code',
-          php:     'pkg install php -y',
-          ruby:    'pkg install ruby -y',
-          perl:    'pkg install perl -y',
-          lua:     'pkg install lua -y',
-          vim:     'pkg install vim -y',
-          openssh: 'pkg install openssh -y',
-          jq:      'pkg install jq -y',
+          git:     [aptBin, 'install', 'git', '-y'],
+          python:  [aptBin, 'install', 'python', '-y'],
+          node:    [aptBin, 'install', 'nodejs', '-y'],
+          clang:   [aptBin, 'install', 'clang', 'make', '-y'],
+          php:     [aptBin, 'install', 'php', '-y'],
+          ruby:    [aptBin, 'install', 'ruby', '-y'],
+          perl:    [aptBin, 'install', 'perl', '-y'],
+          lua:     [aptBin, 'install', 'lua', '-y'],
+          vim:     [aptBin, 'install', 'vim', '-y'],
+          openssh: [aptBin, 'install', 'openssh', '-y'],
+          jq:      [aptBin, 'install', 'jq', '-y'],
         };
         let output = '';
         for (const t of tools) {
-          const cmd = toolMap[t] || 'pkg install ' + t + ' -y';
+          const args = toolMap[t];
+          if (!args) { output += 'Unknown tool: ' + t + '\n'; continue; }
           try {
             output += '\n=== Installing ' + t + ' ===\n';
-            const out = execSync(cmd, { encoding: 'utf-8', timeout: 120000 });
+            const cwd = '/data/data/com.termux/files/home';
+            const env = Object.assign({}, process.env, { PATH: '/data/data/com.termux/files/usr/bin:' + (process.env.PATH || '') });
+            const out = execSync(args.join(' '), { cwd, env, encoding: 'utf-8', timeout: 120000 });
             output += out;
           } catch (e) {
             output += 'ERROR: ' + (e.stderr || e.message) + '\n';

@@ -124,12 +124,22 @@
       });
     }
 
-    // Show on first launch if backend not reachable
-    window.LCOEditor.sendRpc('deployStatus', {}).then(function () {
-      wm.classList.add('hidden'); // Already connected
-    }).catch(function () {
-      wm.classList.remove('hidden'); // Show setup guide
-    });
+    // Show on first launch if backend not reachable (wait for editor bridge)
+    function tryCheck() {
+      if (!window.LCOEditor || !window.LCOEditor.sendRpc) { setTimeout(tryCheck, 500); return; }
+      try {
+        window.LCOEditor.sendRpc('deployStatus', {}).then(function () {
+          wm.classList.add('hidden');
+          // Show deployment center after connection
+          if (modal) modal.classList.remove('hidden');
+        }).catch(function () {
+          wm.classList.remove('hidden');
+        });
+      } catch (e) {
+        wm.classList.remove('hidden');
+      }
+    }
+    setTimeout(tryCheck, 2000);
   }
 
   // Auto-show deployment if ready
