@@ -723,6 +723,7 @@ function handleTerminalConnection(ws) {
       TERM: 'xterm-256color',
       COLORTERM: 'truecolor',
       LCO_ROOT: ROOT,
+      CLAUDE_CODE_TMPDIR: (process.env.HOME || '/data/data/com.termux/files/home') + '/.tmp',
       HOME: process.env.HOME || '/data/data/com.termux/files/home',
       PREFIX: termuxPrefix,
       PATH: termuxPath,
@@ -808,6 +809,7 @@ function handleTerminalConnection(ws) {
           TERM: 'dumb',
           HOME: process.env.HOME || '/data/data/com.termux/files/home',
           LCO_ROOT: ROOT,
+      CLAUDE_CODE_TMPDIR: (process.env.HOME || '/data/data/com.termux/files/home') + '/.tmp',
           PS1: '\\[\\e[32m\\]\\$ \\[\\e[0m\\]',  // Green "$ " prompt
         }),
         stdio: ['pipe', 'pipe', 'pipe'],
