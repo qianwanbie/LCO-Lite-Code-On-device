@@ -1,376 +1,394 @@
 # LCO — Technical Reference
 
-## 1. Communication Flow (Detailed)
+## 1. Project Overview
 
-### 1.1 Chat Message (full trace)
+LCO is a full-stack Android IDE: Flutter shell → WebView (Monaco Editor + xterm.js) → JSON-RPC 2.0 + WebSocket → Node.js backend in Termux. It provides a complete code editing environment on Android tablets with file management, Git integration, interactive terminal, and AI chat capabilities.
 
-```
-[User types in chat sidebar, presses Enter]
-  1. chat.js: sendMessage()
-     → inputEl.value = "你好"
-     → addBubble("你好", 'user')
-     → LCOEditor.sendRpc('claudeChat', { message: "你好" })
+### Key Numbers
+- 14 JSON-RPC methods
+- 4 LLM providers (anthropic/deepseek/openai/claude-cli)
+- 2 WebSocket channels (/ws/terminal, /ws/file-events)
+- 30+ Monaco language modules bundled offline
+- 6 unit tests for MockEngine contract
+- ~43 source files in git (not counting bundled libraries)
 
-  2. editor.js: sendRpc('claudeChat', { message: "你好" })
-     → id = ++requestId
-     → payload = { jsonrpc:'2.0', id:N, method:'claudeChat', params:{message:"你好"} }
-     → LCOBridge.postMessage(JSON.stringify(payload))
-     → pendingRequests[id] = { resolve, reject, timer(30s) }
+---
 
-  3. Flutter: editor_webview.dart → _onJsMessage(JavaScriptMessage)
-     → message.message = '{"jsonrpc":"2.0","id":1,"method":"claudeChat","params":{"message":"你好"}}'
-     → jsonDecode check: not 'editorReady' → fall through
-     → _bridge.handleMessage(message.message)
+## 2. Architecture Layers
 
-  4. Flutter: js_bridge.dart → handleMessage(raw)
-     → _parseJson(raw) → JsonRpcRequest.fromJson(json)
-     → request.method = 'claudeChat', request.params = {message: "你好"}
-     → _dispatchToEngine(1, 'claudeChat', {message: "你好"})
-     → case 'claudeChat': msg = params['message'] = "你好"
-     → _engine.claudeChat("你好")
+### 2.1 Flutter (Dart)
 
-  5. Flutter: termux_engine.dart → claudeChat("你好")
-     → _sendRpc('claudeChat', {'message': "你好"})
-     → body = jsonEncode({jsonrpc:'2.0',id:N,method:'claudeChat',params:{message:"你好"}})
-     → bytes = utf8.encode(body)  ← CRITICAL: explicit UTF-8
-     → HTTP POST http://127.0.0.1:9876/api/rpc
-       Headers: Content-Type: application/json; charset=utf-8
-                Content-Length: <byte_length>
+**Entry Point** (`lib/main.dart`):
+- `SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky)` for fullscreen
+- Creates `TermuxEngine()` which proxies all RPC to Node.js backend
+- `MaterialApp` with dark theme → `EditorWebView(engine)`
 
-  6. Node.js: node_backend.js → HTTP /api/rpc handler
-     → body chunks → body = '{"jsonrpc":"2.0",...,"params":{"message":"你好"}}'
-     → JSON.parse(body) → { id, method:'claudeChat', params:{message:"你好"} }
-     → await dispatchRpc(id, method, params)
-
-  7. Node.js: dispatchRpc → case 'claudeChat'
-     → message = params.message = "你好"
-     → cfg = loadLLMConfig()
-       → reads /data/data/com.termux/files/home/lco-workspace/llm_config.json
-       → returns { provider:'anthropic', endpoint:'https://api.deepseek.com/anthropic',
-                    apiKey:'env:ANTHROPIC_API_KEY', model:'deepseek-chat' }
-     → chatWithLLM(cfg, "你好", callback)
-
-  8. Node.js: chatWithLLM → _callAnthropic
-     → key = resolveApiKey(cfg) → process.env.ANTHROPIC_API_KEY = "sk-a4a8..."
-     → body = JSON.stringify({ model:'deepseek-chat', max_tokens:2048,
-           messages:[{role:'user',content:'你好'}] })
-     → HTTPS POST api.deepseek.com/anthropic/v1/messages
-       Headers: x-api-key: sk-a4a8..., anthropic-version: 2023-06-01
-
-  9. DeepSeek API → Response
-     → { content: [{ text: "你好！有什么可以帮你的？" }] }
-     → callback(null, "你好！有什么可以帮你的？")
-
-  10. Node.js: dispatchRpc resolves
-      → jsonResult(id, { response: "你好！有什么可以帮你的？" })
-      → '{"jsonrpc":"2.0","id":1,"result":{"response":"你好！有什么可以帮你的？"}}'
-
-  11. Flutter: termux_engine.dart receives HTTP response
-      → raw = await response.transform(utf8.decoder).join()
-      → jsonDecode(raw) → JsonRpcResponse.fromJson
-      → _sendRpc returns JsonRpcResponse
-
-  12. Flutter: js_bridge.dart completes pending request
-      → completer.complete(response)
-      → handleMessage returns response.encode()
-      → jsonEncode called on response string for JavaScript injection
-
-  13. Flutter: editor_webview.dart
-      → runJavaScript("window.dispatchEvent(new CustomEvent('lco-response',
-           {detail: ${jsonEncode(response)}}))")
-      → jsonEncode escapes quotes/newlines → valid JS string literal
-
-  14. Browser: editor.js
-      → window 'lco-response' event fires
-      → e.detail = '{"jsonrpc":"2.0","id":1,"result":{"response":"你好！..."}}'
-      → JSON.parse(e.detail) → handleResponse(response)
-      → pendingRequests[id].resolve(response.result)
-      → sendRpc promise resolves
-
-  15. chat.js: .then(result)
-      → updateClaudeBubble(el, result.response)
-      → el.textContent = "你好！有什么可以帮你的？"
+**IDEEngine Interface** (`lib/engine/ide_engine.dart`):
+```dart
+abstract class IDEEngine {
+  Future<JsonRpcResponse> saveFile(String path, String content);
+  Future<JsonRpcResponse> readFile(String path);
+  Future<JsonRpcResponse> listFiles([String? dirPath]);
+  Future<JsonRpcResponse> runGitCommand(List<String> args);
+  Future<JsonRpcResponse> changeWorkspace(String subFolder);
+  Future<JsonRpcResponse> deleteFile(String path);
+  Future<JsonRpcResponse> renameFile(String oldPath, String newPath);
+  Future<JsonRpcResponse> runScript(String path);
+  Future<JsonRpcResponse> claudeChat(String message);
+  Future<JsonRpcResponse> updateLLMConfig(Map<String, dynamic> config);
+  Stream<FileChangeEvent> get fileChangeStream;
+  Future<void> initialize();
+  Future<void> dispose();
+}
 ```
 
-### 1.2 Terminal I/O (full trace)
+**TermuxEngine** (`lib/engine/termux_engine.dart`):
+- All RPC methods call `_sendRpc(method, params)` which:
+  1. `jsonEncode` the request
+  2. `utf8.encode(body)` for explicit UTF-8
+  3. HTTP POST to `http://127.0.0.1:9876/api/rpc`
+  4. Parse JSON response → `JsonRpcResponse`
+- Emits `FileChangeEvent` on mutations (saveFile, deleteFile)
 
+**MockEngine** (`lib/engine/mock_engine.dart`):
+- Phase 1 development engine
+- Stores files in `getApplicationDocumentsDirectory()/lco-workspace/`
+- Seeds demo files: `src/main.dart`, `src/utils.dart`, `pubspec.yaml`, `README.md`, `.gitignore`
+- Simulates Git output
+- Injectable `rootDirectory` for testing
+
+**JSON-RPC Protocol** (`lib/protocol/json_rpc.dart`):
+- `JsonRpcRequest`: jsonrpc, id, method, params, toJson/fromJson, encode
+- `JsonRpcResponse`: jsonrpc, id, result, error, toJson/fromJson, encode
+- `JsonRpcError`: code, message, data
+- `FileChangeEvent`: path, type (created/modified/deleted/refresh), converts to notification
+- Error codes: -32700 parse, -32601 method, -32602 params, -32001 perm, -32002 not found, -32603 internal
+
+**AssetServer** (`lib/webview/asset_server.dart`):
+- Singleton (factory → private instance)
+- Binds `HttpServer` to `127.0.0.1:0` (random available port)
+- Serves all `pubspec.yaml`-declared assets via HTTP
+- `_isTextAsset()`: .html/.js/.css/.json/.svg/.xml/.yaml/.yml/.md/.txt/.dart → string + charset=utf-8
+- Binary: .png/.woff2/etc → bytes
+- CORS: `Access-Control-Allow-Origin: *`, no-cache
+- **Why it exists**: Android WebView with `file:///` origin (origin=null) blocks CORS and Web Workers. Serving via HTTP gives proper origin.
+
+**EditorWebView** (`lib/webview/editor_webview.dart`):
+- `_startServerAndLoad()`: starts AssetServer → `loadRequest(http://127.0.0.1:PORT/index.html)`
+- `_onJsMessage()`: intercepts `editorReady` notification → `setState(_isEditorReady = true)` to hide Flutter loading overlay
+- All other messages → `_bridge.handleMessage()` → response injected as CustomEvent
+- `_onConsoleMessage()`: forwards all JS console (info/warn/error) to Flutter debugPrint
+- `_fileChangeSub`: subscribes to engine.fileChangeStream, pushes `lco-file-change` events to JS
+
+**JSBridge** (`lib/webview/js_bridge.dart`):
+- `handleMessage(raw)`: parse JSON → dispatch to engine → return encoded response
+- `_parseJson(raw)`: tries `jsonDecode`, falls back to single-quote→double-quote replacement
+- `_normalizePath(raw)`: strips leading `/`, converts `\` to `/`, collapses slashes, blocks `..`
+- `_dispatchToEngine()`: switch-case mapping 14 method names to engine calls
+- Pending request tracking by ID with 30s timeout
+- `disposePending()`: complete all pending on disposal
+
+### 2.2 WebView Frontend (HTML/CSS/JS)
+
+**index.html**:
+- Three-panel flex layout: sidebar | main (editor + terminal) | chat sidebar
+- Monaco bootstrap:
+  1. Try local `loader.js`
+  2. On error → CDN `loader.js` from jsDelivr
+  3. `require(['vs/editor/editor.main'])` → hide loading overlay → load editor.js
+  4. CDN retry without reloading loader.js
+- xterm.js: local primary + CDN fallback with document.write detection
+- Workspace bar: project name + ⌂(home) + +(new) + ⇄(switch) + ⌬(Claude badge)
+- Floating toolbar: ▶ Test | 💾 Save | EN | ⎇ Git
+- Modal dialog for new/switch project
+- Drag resize handles (mouse + touch) for sidebar width and terminal height
+
+**Script Load Order**:
 ```
-[User types 'ls' in terminal]
-  1. xterm.onData('l')
-  2. xterm.onData('s')
-  3. xterm.onData('\r')
-     → ws.send(JSON.stringify({ type:'input', data:'ls\r' }))
-
-  4. Node.js: ws.on('message')
-     → msg = JSON.parse(data) → { type:'input', data:'ls\r' }
-     → ptyProcess.write('ls\r')
-
-  5. bash executes 'ls'
-     → stdout: 'src  pubspec.yaml  README.md\n'
-     → ptyProcess.onData('src  pubspec.yaml  README.md\n')
-
-  6. Node.js: ptyProcess.onData handler
-     → wsSend(ws, { type:'output', data:'src  pubspec.yaml  README.md\n' })
-     → data = encodeURIComponent('src  pubspec.yaml  README.md\n')
-     → json = '{"type":"output","data":"src%20%20pubspec.yaml%20%20README.md%0A"}'
-     → ws.send('82|{"type":"output","data":"src%20%20pubspec.yaml%20%20README.md%0A"}')
-
-  7. Browser: ws.onmessage
-     → msgBuffer += '82|{"type":"output","data":"src%20%20pubspec.yaml%20%20README.md%0A"}'
-     → Parse: pipeIdx=2, len=82, json starts at index 3
-     → JSON.parse → { type:'output', data:'src%20%20pubspec.yaml%20%20README.md%0A' }
-     → decodeURIComponent → 'src  pubspec.yaml  README.md\n'
-     → xterm.write('src  pubspec.yaml  README.md\n')
-```
-
-## 2. File Operation Traces
-
-### 2.1 File Tree Click → Open
-
-```
-file-explorer.js: click on 'main.dart'
-  → openFile('/src/main.dart', 'main.dart')
-  → LCOEditor.openFile('/src/main.dart', 'dart')
-  → sendRpc('readFile', { path:'/src/main.dart' })
-  → ... (RPC roundtrip through Flutter → backend) ...
-  → result = { content:'void main() {...}', encoding:'utf-8' }
-  → monaco.editor.createModel(content, 'dart', uri)
-  → editor.setModel(model)
-```
-
-### 2.2 Auto-Save
-
-```
-editor.js: onDidChangeModelContent
-  → isDirty = true
-  → debounce 1s → explicitSave()
-  → sendRpc('saveFile', { path: model.uri.path, content: model.getValue() })
-  → ... backend writes to disk (atomic: temp→rename) ...
-  → FileChangeEvent emitted → Flutter fileChangeStream
-  → editor_webview.dart pushes 'lco-file-change' CustomEvent to JS
-  → editor.js handleFileChange → re-reads file → model.setValue()
-```
-
-### 2.3 Right-Click → Delete
-
-```
-file-explorer.js: right-click → Delete
-  → deleteFileConfirm(fileInfo)
-  → confirm("Delete 'main.dart'?")
-  → sendRpc('deleteFile', { path:'/src/main.dart' })
-  → ... backend: fs.unlinkSync(resolvedPath) ...
-  → FileChangeEvent('deleted')
-  → refresh() → listFiles → re-render tree
-```
-
-### 2.4 Right-Click → Run
-
-```
-file-explorer.js: right-click test.py → Run
-  → runScriptFile('/test.py', 'test.py')
-  → terminal.write('\x1b[1;36m▶ Running: /test.py\x1b[0m\r\n')
-  → sendRpc('runScript', { path:'/test.py' })
-  → ... backend: exec('python /path/to/test.py') ...
-  → stdout → broadcast to terminal clients as 'terminalOutput'
-  → terminal.js: ws.onmessage → processMessage → xterm.write(output)
+1. lco.css, xterm.css
+2. i18n.js
+3. Monaco path config (inline)
+4. Monaco bootstrap (inline, async)
+5. xterm.js + addons (local + CDN)
+6. file-explorer.js
+7. terminal.js
+8. chat.js
 ```
 
-## 3. Workspace Management
+**editor.js** (Monaco + RPC Adapter):
+- `configureWorkers()`: getWorkerUrl with relative paths to local worker files (.js/.css/.html/.ts)
+- `createEditor()`: vs-dark theme, automaticLayout, Cascadia Code font, no minimap, word wrap
+- `sendRpc(method, params)`: incrementing ID, 30s timeout, LCOBridge.postMessage(JSON.stringify(payload))
+- Response handling via `lco-response` CustomEvent → JSON.parse → resolve pending promise
+- File change handling via `lco-file-change` → re-read modified files
+- Auto-save: `onDidChangeModelContent` → 1s debounce → `explicitSave()`
+- Explicit save: Ctrl+S / `onDidBlurEditorWidget` / toolbar Save button
+- Window API: `window.LCOEditor.sendRpc()`, `.openFile()`, `.save()`, `.runTest()`, `.toggleLocale()`
 
-### 3.1 Switch Project
+**file-explorer.js** (File Tree + Workspace):
+- `refresh()`: async `listFiles` RPC from root
+- `loadChildren(parent, dirPath)`: load directory contents, sort dirs-first
+- `renderNode(parent, fileInfo, depth)`: create tree node with icon + chevron + name
+- Click → `LCOEditor.openFile(path, language)` → setValue
+- Right-click context menu:
+  - Open, Copy Path
+  - Git Status, Git Log, Git Add
+  - **Run** (for .py/.js/.sh/.dart)
+  - **Rename** (prompt for new name)
+  - **Delete** (confirm dialog)
+  - Refresh
+- Workspace bar: ⌂(home), +(new project modal), ⇄(switch project modal), ⌬(Claude badge)
+- `switchWorkspace(folderName)`: RPC switchWorkspace → cd terminal + broadcast + refresh
+- `switchToHome()`: reset to PROJECT_ROOT
+- `checkClaudeConfig()`: detect `.claude` directory → show badge
 
+**terminal.js** (xterm.js + WebSocket):
+- xterm.js 5.5 with FitAddon + WebLinksAddon
+- 16-color VS Code dark palette
+- WebSocket `ws://127.0.0.1:9876/ws/terminal`
+- **Buffer assembly**: handles fragmented WebSocket frames via length-prefix protocol (`LENGTH|JSON`) or direct JSON parse
+- **URI decode**: `decodeURIComponent` for Chinese character safety
+- Reconnect: 5 attempts, 3s delay between retries
+- Message handlers: output, error, cd, terminalOutput (from runScript)
+- `cd` into file detection: buffers input, warns if target looks like a file
+- Window API: `window.LCOTerminal.write()`, `.clear()`, `.focus()`, `.connect()`
+
+**chat.js** (Chat Sidebar):
+- Sends `claudeChat` JSON-RPC for each message
+- Renders bubbles: user (right, blue), claude (left, dark), system (center, grey)
+- ANSI escape code stripping for clean display
+- Enter to send, Shift+Enter for newline
+- Window API: `window.LCOChat.toggle()`, `.show()`, `.hide()`
+
+**i18n.js**:
+- EN/ZH message sets
+- `t(key, locale)`: lookup with fallback to EN
+- `setLocale(locale)`: switch language, emits `lco-locale-changed` event
+- Messages: loading states, file ops, git, errors
+
+**lco.css**:
+- CSS variables: `--lco-bg`, `--lco-accent`(#007acc), `--lco-sidebar-width`(240px), `--lco-terminal-height`(200px)
+- Flexbox three-panel layout
+- Resize handles: 4px draggable, highlight on hover, mouse+touch
+- Tree nodes: indentation, chevrons (▸/▾), file type icons, hover/active states
+- Context menu: fixed position, drop shadow, separator lines
+- Modal: overlay + box, form inputs, project list
+- Chat bubbles: user/claude/system roles, code/pre formatting
+- Floating toolbar: top-right, semi-transparent, full opacity on hover
+- Status bar: 22px, color-coded (success green / info blue / error red / warn orange)
+- Custom scrollbar: 8px, dark theme
+- Collapsed states for sidebar and terminal
+
+### 2.3 Node.js Backend (`assets/server/node_backend.js`)
+
+**Server Structure**:
 ```
-file-explorer.js: click ⇄ → openModal('switch')
-  → loadProjectList()
-  → sendRpc('listFiles', { dirPath:'/' })
-  → filter directories → render .project-item for each
-  → User clicks 'my-project'
-  → switchWorkspace('my-project')
-  → sendRpc('switchWorkspace', { subFolder:'my-project' })
-  → ... backend: isPathAllowed(newRoot) → broadcast cd to terminal → broadcastFileTreeRefresh ...
-  → terminal.js: receives { type:'cd', path } → sends 'cd "/path"\r' + 'clear\r' to PTY
-  → file-explorer.js: refresh() → listFiles from new root
+http://127.0.0.1:9876
+├── POST /api/rpc → dispatchRpc(id, method, params)
+├── GET /health → { status, ptyAvailable, root, watcherActive }
+├── WebSocket /ws/terminal → handleTerminalConnection
+├── WebSocket /ws/file-events → file change push
+└── WebSocket /ws/claude → handleClaudeConnection (experimental)
 ```
 
-### 3.2 New Project
+**dispatchRpc** (async):
+- 11 method cases + 4 tool aliases + unknown handler
+- `claudeChat` is the only async case (uses `await new Promise` for API call)
+- All other methods are synchronous filesystem operations
 
+**LLM Adapter**:
 ```
-file-explorer.js: click + → openModal('new')
-  → User types 'my-app' → handleModalConfirm
-  → sendRpc('saveFile', { path:'/my-app/.lco', content:'' })
-  → ... backend creates my-app/ directory ...
-  → refresh() → new folder appears in tree
-```
-
-### 3.3 Home Button
-
-```
-file-explorer.js: click ⌂ → switchToHome()
-  → sendRpc('switchWorkspace', { path:'' })
-  → ... backend: newRoot = PROJECT_ROOT ...
-  → cd to PROJECT_ROOT in terminal
-  → refresh tree from PROJECT_ROOT
+loadLLMConfig() → reads lco-workspace/llm_config.json
+  ↓
+chatWithLLM(cfg, message, callback)
+  ├── provider='anthropic' → _callAnthropic(endpoint, key, model, msg)
+  │     POST /v1/messages, x-api-key header, anthropic-version: 2023-06-01
+  ├── provider='deepseek'/'openai' → _callOpenAI(endpoint, key, model, msg)
+  │     POST /v1/chat/completions, Authorization: Bearer header
+  └── provider='claude-cli' → spawn bash → claude bash script
 ```
 
-## 4. Backend Reference
+**Auto-Execution Blocks** (in claudeChat response processing):
+1. ` ```file:path\ncontent``` ` → resolvePath → mkdir -p → writeFile → actions.push('✓ created path')
+2. ` ```shell:command``` ` → execSync(command, {cwd:ROOT}) → insert output
+3. ` ```read:path``` ` → readFileSync → insert content with language tag
 
-### 4.1 Server Structure
+After execution: `broadcastFileTreeRefresh()` if any files changed.
 
-```
-Server (http://127.0.0.1:9876)
-│
-├── POST /api/rpc
-│   └── dispatchRpc(id, method, params) — async
-│       ├── saveFile       → atomic write + checksum
-│       ├── readFile       → UTF-8 read
-│       ├── listFiles      → directory listing
-│       ├── runGitCommand  → child_process.execSync('git ...')
-│       ├── deleteFile     → fs.unlinkSync / fs.rmSync
-│       ├── renameFile     → fs.renameSync
-│       ├── runScript      → child_process.exec → terminal output
-│       ├── switchWorkspace → update root + cd terminal + broadcast
-│       ├── claudeChat     → chatWithLLM → API call
-│       └── updateLLMConfig → fs.writeFileSync
-│
-├── GET /health
-│   └── { status, ptyAvailable, root, watcherActive }
-│
-├── WebSocket /ws/terminal
-│   ├── PTY mode: pty.spawn(bash) ← node-pty
-│   ├── Fallback: spawn(bash) ← child_process
-│   └── Messages: {type:'input'}, {type:'output'}, {type:'resize'}, {type:'cd'}
-│
-└── WebSocket /ws/file-events
-    └── fs.watch(ROOT, {recursive:true}) → broadcast {type:'fileChange',...}
-```
+**Terminal WebSocket** (/ws/terminal):
+- **PTY mode** (node-pty): `pty.spawn(bash, [], {name:'xterm-256color', cols, rows, cwd, env})`
+  - PTY → WS: `pty.onData(data)` → `wsSend(ws, {type:'output', data})`
+  - WS → PTY: `ws.on('message', {type:'input', data})` → `pty.write(data)`
+  - Resize: `ws.on('message', {type:'resize', cols, rows})` → `pty.resize(cols, rows)`
+  - Exit: `pty.onExit({exitCode})` → notify client + cleanup
+- **Fallback mode** (child_process.spawn): bash with pipe stdio, no TTY
+- **wsSend()**: length-prefix (`Buffer.byteLength|JSON`) + `encodeURIComponent` on data fields
+- **Termux PATH**: `/data/data/com.termux/files/usr/bin:` + applets + system paths
+- **PS1**: `\[\e[32m\]\W\[\e[0m\]\$ ` (green current-dir$ prompt)
+- **Welcome**: `ls -la` on connect (or empty-workspace banner with git clone hint)
 
-### 4.2 Path Security
-
+**Path Security**:
 ```javascript
 const ALLOWED_ROOTS = [
   '/data/data/com.termux/files/home/lco-workspace',
-  '/data/user/0/com.termux/lco-workspace',  // Android symlink alias
+  '/data/user/0/com.termux/lco-workspace',  // Android symlink
   '/data/data/com.termux/files/home',
   '/data/user/0/com.termux',
 ];
 
 function isPathAllowed(targetPath) {
-  // 1. Try fs.realpathSync for symlink resolution
-  // 2. Fallback to string prefix match
-  // 3. Check against ALLOWED_ROOTS
+  // 1. fs.realpathSync for symlink resolution
+  // 2. String prefix fallback for non-existent paths
 }
 ```
 
-### 4.3 wsSend Helper
+**PROJECT_ROOT**: `/data/data/com.termux/files/home/lco-workspace/`
 
-```javascript
-function wsSend(ws, obj) {
-  if (ws.readyState !== WebSocket.OPEN) return;
-  if (obj.data) obj.data = encodeURIComponent(obj.data);  // Chinese safety
-  const json = JSON.stringify(obj);
-  ws.send(Buffer.byteLength(json, 'utf-8') + '|' + json); // length-prefix
-}
-```
+**Workspace Context Injection** (`getWorkspaceContext()`):
+- Prepend to every claudeChat message:
+  - Project identity (LCO IDE, Android)
+  - Current workspace path
+  - File tree (recursive, 2 levels deep, skipping dotfiles except .claude)
+  - Available tool block reference (file:, shell:, read:)
 
-## 5. Frontend Reference
+---
 
-### 5.1 Script Load Order
+## 3. Communication Protocols
 
-```
-index.html:
-  1. lco.css (stylesheet)
-  2. xterm.css (stylesheet)
-  3. i18n.js
-  4. Monaco path config (inline)
-  5. Monaco bootstrap (inline) — async, loads editor.js when ready
-  6. xterm.js + addons (local + CDN fallback)
-  7. file-explorer.js
-  8. terminal.js
-  9. chat.js
-```
-
-### 5.2 Global APIs
-
-```javascript
-// All available on window after load:
-window.LCOEditor        // Monaco + RPC adapter
-  .sendRpc(method, params)  → Promise<result>
-  .openFile(path, lang)     → Promise
-  .save() / .runTest() / .toggleLocale()
-  .isReady() / .isDirty()
-
-window.LCOFileExplorer  // File tree
-  .refresh() / .openFile()
-
-window.LCOTerminal      // xterm.js terminal
-  .write(text) / .clear() / .focus()
-
-window.LCOChat          // Claude chat sidebar
-  .toggle() / .show() / .hide()
-
-window.LCO_i18n         // Internationalization
-  .t(key) / .setLocale(locale) / .getLocale()
-```
-
-### 5.3 Chat Message Protocol
+### 3.1 JSON-RPC 2.0 (Chat + File Operations)
 
 ```
-Frontend → Backend (via JSON-RPC):
-{ jsonrpc:'2.0', id:N, method:'claudeChat', params:{ message:string } }
-
-Backend → Frontend (via JSON-RPC response):
-{ jsonrpc:'2.0', id:N, result:{ response:string } }
-// OR
-{ jsonrpc:'2.0', id:N, error:{ code:int, message:string } }
+JS (WebView)                          Flutter (Dart)                     Backend (Node.js)
+──────────                            ────────────                       ────────────────
+chat.js: sendRpc('claudeChat',{msg})
+  → JSON.stringify(payload)
+  → LCOBridge.postMessage       ──→  _onJsMessage
+                                      → _bridge.handleMessage
+                                        → _parseJson
+                                        → _dispatchToEngine
+                                        → _engine.claudeChat(msg)
+                                          → utf8.encode(body)
+                                          → HTTP POST /api/rpc     ──→  JSON.parse(body)
+                                                                        → dispatchRpc
+                                                                        → chatWithLLM
+                                                                        → API call
+                                                                        ← jsonResult(id,{response})
+                                          ← HTTP response          ←──
+                                        ← JsonRpcResponse
+                                      → jsonEncode(response)
+                                      → runJavaScript(CustomEvent) ──→  window 'lco-response'
+  → JSON.parse(e.detail)
+  → handleResponse(result)
+  → updateBubble(text)
 ```
 
-## 6. Build & Deploy
+### 3.2 WebSocket (Terminal)
 
-### 6.1 Flutter APK
+```
+xterm.onData → ws.send({type:'input',data})
+  → node_backend.js → ptyProcess.write(data) → bash
+  → ptyProcess.onData → wsSend(ws,{type:'output',data:encodeURIComponent(data)})
+  → terminal.js → msgBuffer assemble → decodeURIComponent → xterm.write
+```
 
+---
+
+## 4. UI Layout
+
+```
+┌──────────────────────────────────────────────────────────────────┐
+│  ▶ Test  💾 Save  EN  ⎇ Git    ← Floating Toolbar               │
+├───────────────┬──────────────────────────┬───────────────────────┤
+│ lco-workspace │                          │ ⌬ CLAUDE CHAT    ✕   │
+│ ⌂ + ⇄ ⌬      │    Monaco Editor          │                       │
+│ EXPLORER   ↻  │                           │  [You] Hello         │
+│               │    void main() {          │                       │
+│ ▸ src/        │      print("hi");         │  [Claude] Hi! How    │
+│   main.dart   │    }                      │  can I help?         │
+│ ▸ test/       │                           │                       │
+│ hello.py      │                           │  [______________] ↑  │
+├───────────────┴──────────────────────────┴───────────────────────┤
+│  TERMINAL  ◻ ⌧ ✕                                                │
+│  lco-workspace $ ls                                              │
+│  src/  hello.py  llm_config.json                                 │
+├──────────────────────────────────────────────────────────────────┤
+│  ● Monaco Editor ready                                           │
+└──────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## 5. Build & Deploy
+
+### Flutter APK
 ```bash
-cd LCO
-flutter pub get
-flutter build apk --debug
-# Output: build/app/outputs/flutter-apk/app-debug.apk
+flutter pub get && flutter build apk --debug
 adb install build/app/outputs/flutter-apk/app-debug.apk
 ```
 
-### 6.2 Backend Setup (one-time)
-
-```bash
-# In Termux:
-pkg install clang make python binutils nodejs -y
-cd ~
-mkdir -p LCO/assets/server
-# Copy node_backend.js to ~/LCO/assets/server/
-cd ~/LCO/assets/server
-npm install ws
-npm install node-pty  # May need: export CC=clang CXX=clang++
+### Gradle Configuration
+```
+gradle-wrapper.properties:  gradle-8.14-all.zip (file://)
+settings.gradle:            AGP 8.11.1, Kotlin 2.2.20
+app/build.gradle:           compileSdk 36, targetSdk 36, minSdk 24, NDK 28.2.13676358
 ```
 
-### 6.3 Backend Start (every reboot)
+### Backend (one-time setup in Termux)
+```bash
+pkg install clang make python binutils nodejs proot-distro -y
+cd ~/LCO/assets/server
+npm install ws
+npm install node-pty  # CC=clang CXX=clang++ if needed
+```
 
+### Backend Start (every reboot)
 ```bash
 cd ~/LCO/assets/server
 bash -c 'source ~/.bashrc && exec node node_backend.js --port=9876'
-termux-wake-lock  # Keep alive when screen off
+termux-wake-lock
 ```
 
-### 6.4 API Key Setup
+---
 
-```bash
-# In Termux, add to ~/.bashrc:
-echo 'export ANTHROPIC_API_KEY="sk-your-key-here"' >> ~/.bashrc
-echo 'export ANTHROPIC_BASE_URL="https://api.deepseek.com/anthropic"' >> ~/.bashrc
-source ~/.bashrc
-```
+## 6. Dual Chat Strategy (Final)
 
-## 7. Known Limitations
+**Approach A — Chat Sidebar (LLM Adapter)** ✅ Production
+- Frontend: chat.js → JSON-RPC `claudeChat` → backend → HTTP API call
+- Pros: Stable, works without glibc/proot, supports file:/shell:/read: auto-execution
+- Cons: Not interactive Claude Code (single-turn)
 
-1. **Monaco Editor bundle** (~117 files) must be declared in `pubspec.yaml` subdirectory by subdirectory. Missing `editor/` or `assets/` subdirectory → "Loading Monaco Editor..." stuck.
-2. **node-pty** requires native ARM64 compilation in Termux. `npm install node-pty` may fail if `clang`/`make` not installed. Fallback: `child_process.spawn('bash')`.
-3. **Claude CLI** (claude-chat provider) is a bash script requiring glibc. Spawning it from `run-as` context has TTY issues. The HTTP API providers (anthropic/deepseek/openai) are recommended.
-4. **Wireless ADB** ports expire every few minutes. USB debugging is more stable for development.
-5. **Gradle** download from `services.gradle.org` may be blocked. Use Tencent mirror + `file://` URL in `gradle-wrapper.properties`.
-6. **WebView `file:///` origin** blocks CORS and Workers. AssetServer singleton solves this by serving via HTTP.
+**Approach B — Terminal CLI** ✅ Available
+- User types `claude` in PTY terminal → full interactive Claude Code
+- Pros: Complete desktop Claude experience
+- Cons: Requires API key in .bashrc, proot-distro needed for glibc
+
+**Approach C — WebSocket Claude PTY** ⚠️ Experimental
+- Backend spawns Claude via node-pty for streaming I/O
+- Persists across WebSocket disconnects
+- Currently blocked by: glibc binary in Termux context doesn't produce stdout
+
+**Verified workaround**: Claude binary runs inside `proot-distro login ubuntu` and returns correct output. Full integration requires solving stdin/stdout piping through proot+spawn.
+
+---
+
+## 7. Security
+
+- `resolvePath()`: blocks `..` traversal, verifies resolved path starts with ALLOWED_ROOTS
+- `isPathAllowed()`: symlink-aware comparison via `fs.realpathSync`
+- All servers bind to `127.0.0.1` only (localhost)
+- AssetServer serves from APK assets (read-only)
+- `_normalizePath()` in JSBridge as second layer of path validation
+
+---
+
+## 8. Testing
+
+6 unit tests in `test/engine/mock_engine_test.dart`:
+1. saveFile creates file and returns checksum
+2. readFile returns saved content
+3. readFile errors for missing file
+4. saveFile emits FileChangeEvent
+5. listFiles returns file entries
+6. runGitCommand simulates git init
+
+Test infrastructure: `TestWidgetsFlutterBinding`, injectable `rootDirectory` (Directory.systemTemp), cleanup.
