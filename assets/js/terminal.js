@@ -195,6 +195,9 @@
       }
     });
 
+    // Register terminal as tab 1 (now that terminal is fully created)
+    registerExistingTerminal();
+
     console.log('[Terminal] Initialized');
   }
 
@@ -392,8 +395,6 @@
     var t1 = document.querySelector('.terminal-tab[data-tab-id="1"]');
     if (t1) t1.classList.add('active');
   }
-  // Call after init completes (terminal is ready)
-  setTimeout(registerExistingTerminal, 200);
 
   function createTerminalTab() {
     tabCounter++;

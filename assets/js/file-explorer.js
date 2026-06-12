@@ -124,9 +124,11 @@
       } else {
         // Sub-directory
         var wrapper = document.createElement('div');
-        wrapper.className = 'lco-tree-children'; // not collapsed
+        wrapper.className = 'lco-tree-children';
+        // Calculate depth: count parent dir separators in the path
+        var childDepth = (dirPath.match(/\//g) || []).length;
         files.forEach(function (f) {
-          renderNode(wrapper, f, 0);
+          renderNode(wrapper, f, childDepth);
         });
         parentEl.parentNode.insertBefore(wrapper, parentEl.nextElementSibling);
         // Update parent chevron
