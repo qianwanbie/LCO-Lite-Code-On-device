@@ -32,11 +32,6 @@
   var reconnectAttempts = 0;
 
   var WS_URL = 'ws://127.0.0.1:9876/ws/terminal';
-  var tabCounter = 1;
-
-  function makeWsUrl(tabId) {
-    return WS_URL + '?tabId=' + tabId;
-  }
 
   // ---------------------------------------------------------------------------
   // Banner
@@ -413,8 +408,12 @@
       theme: (terminal ? terminal.options.theme : {}),
       allowProposedApi: true, scrollback: 5000, tabStopWidth: 2,
     });
-    var fit = new FitAddon.FitAddon();
-    t.loadAddon(fit);
+    if (typeof FitAddon !== 'undefined') {
+      var fit = new FitAddon.FitAddon();
+      t.loadAddon(fit);
+    } else {
+      var fit = null;
+    }
     t.open(wrapper);
     setTimeout(function () { try { fit.fit(); } catch(e) {} }, 100);
 
@@ -493,12 +492,6 @@
     var tabEl = document.querySelector('.terminal-tab[data-tab-id="' + id + '"]');
     if (tabEl) tabEl.remove();
     if (tabList.length > 0) switchToTab(tabList[0].id);
-  }
-
-  // New tab button handler
-  var newTabBtn = document.getElementById('lco-terminal-new-tab');
-  if (newTabBtn) {
-    newTabBtn.addEventListener('click', function () { createTerminalTab(); });
   }
 
   window.LCOTerminal = {
