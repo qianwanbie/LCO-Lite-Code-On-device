@@ -631,6 +631,47 @@ async function dispatchRpc(id, method, params) {
         }
       }
 
+      // ── deployStatus ──
+      case 'deployStatus': {
+        const readyFile = '/data/data/com.termux/files/home/.lco_ready';
+        return jsonResult(id, { ready: fs.existsSync(readyFile) });
+      }
+
+      // ── deployInstall ──
+      case 'deployInstall': {
+        const tools = params.tools || [];
+        if (!tools.length) return jsonError(id, -32602, 'No tools selected');
+        const toolMap = {
+          git:     'pkg install git -y',
+          python:  'pkg install python -y',
+          node:    'pkg install nodejs -y',
+          clang:   'pkg install clang make -y',
+          claude:  'npm install -g @anthropic-ai/claude-code',
+          php:     'pkg install php -y',
+          ruby:    'pkg install ruby -y',
+          perl:    'pkg install perl -y',
+          lua:     'pkg install lua -y',
+          vim:     'pkg install vim -y',
+          openssh: 'pkg install openssh -y',
+          jq:      'pkg install jq -y',
+        };
+        let output = '';
+        for (const t of tools) {
+          const cmd = toolMap[t] || 'pkg install ' + t + ' -y';
+          try {
+            output += '\n=== Installing ' + t + ' ===\n';
+            const out = execSync(cmd, { encoding: 'utf-8', timeout: 120000 });
+            output += out;
+          } catch (e) {
+            output += 'ERROR: ' + (e.stderr || e.message) + '\n';
+          }
+        }
+        // Write ready marker
+        const readyFile = '/data/data/com.termux/files/home/.lco_ready';
+        fs.writeFileSync(readyFile, new Date().toISOString());
+        return jsonResult(id, { status: 'ok', output: output.trim() });
+      }
+
       // ── Unknown ──
       default:
         return jsonError(id, -32601, 'Method not found: ' + method);

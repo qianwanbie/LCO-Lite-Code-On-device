@@ -153,6 +153,19 @@
     </div>
   </div>
 
+  <!-- Deployment Modal -->
+  <div id="lco-deploy-modal" class="modal-overlay hidden">
+    <div class="modal-box" style="width:400px">
+      <div class="modal-header"><span>LCO Setup Wizard</span><button class="close-btn" id="lco-deploy-close">✕</button></div>
+      <div class="modal-body" style="max-height:55vh;overflow-y:auto">
+        <p style="margin-bottom:8px">Select tools to install in Termux:</p>
+        <div id="lco-deploy-list"></div>
+        <button id="lco-deploy-all" class="primary" style="width:100%;margin-top:10px;padding:10px">Install Selected</button>
+        <pre id="lco-deploy-output" style="display:none;background:#1e1e1e;color:#4ec9b0;padding:8px;margin-top:8px;font-size:11px;max-height:150px;overflow-y:auto"></pre>
+      </div>
+    </div>
+  </div>
+
   <!-- Tutorial Modal -->
   <div id="lco-tutorial-modal" class="modal-overlay hidden">
     <div class="modal-box">
@@ -324,6 +337,7 @@
   <script src="js/terminal.js"></script>
   <script src="js/preview.js"></script>
   <script src="js/ui.js"></script>
+  <script src="js/deploy.js"></script>
 
   <!-- Sidebar resize drag handle -->
   <script>
