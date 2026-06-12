@@ -2,26 +2,42 @@ package com.lco.ide
 
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
+import io.flutter.plugin.common.MethodChannel
 import android.os.Bundle
 import android.content.Intent
 import android.net.Uri
-import android.provider.DocumentsContract
 
 class MainActivity : FlutterActivity() {
 
-    companion object {
-        const val SAF_REQUEST_CODE = 1001
-        const val CHANNEL = "com.lco.ide/saf"
-    }
-
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
-        // SAF directory picker channel will be set up here in Phase 2.
+
+        // Termux IPC channel — auto-start backend
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "com.lco.ide/termux")
+            .setMethodCallHandler { call, result ->
+                if (call.method == "startBackend") {
+                    try {
+                        val cmd = call.argument<String>("command") ?: ""
+                        val intent = Intent("com.termux.RUN_COMMAND")
+                        intent.setClassName("com.termux", "com.termux.app.RunCommandService")
+                        intent.putExtra("com.termux.RUN_COMMAND_PATH",
+                            "/data/data/com.termux/files/usr/bin/bash")
+                        intent.putExtra("com.termux.RUN_COMMAND_ARGUMENTS", arrayOf("-c", cmd))
+                        intent.putExtra("com.termux.RUN_COMMAND_WORKDIR",
+                            "/data/data/com.termux/files/home")
+                        startService(intent)
+                        result.success(true)
+                    } catch (e: Exception) {
+                        result.success(false)
+                    }
+                } else {
+                    result.notImplemented()
+                }
+            }
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        // Request MANAGE_EXTERNAL_STORAGE on Android 11+ at startup.
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
             if (!android.os.Environment.isExternalStorageManager()) {
                 val intent = Intent(android.provider.Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION)

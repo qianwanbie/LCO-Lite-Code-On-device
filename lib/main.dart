@@ -6,6 +6,7 @@ library;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:lco/engine/bootstrap.dart';
 import 'package:lco/engine/ide_engine.dart';
 import 'package:lco/engine/termux_engine.dart';
 import 'package:lco/webview/editor_webview.dart';
@@ -15,6 +16,10 @@ void main() async {
 
   // Hide system status bar + nav bar for fullscreen IDE experience
   await SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
+
+  // Auto-start Node.js backend if Termux is installed
+  final booted = await LCOBootstrap.startIfPossible();
+  debugPrint(booted ? '[LCO] Backend auto-started' : '[LCO] Backend not auto-started');
 
   // Use TermuxEngine to connect to the Node.js backend.
   final engine = TermuxEngine();
