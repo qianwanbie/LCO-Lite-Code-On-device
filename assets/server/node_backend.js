@@ -726,6 +726,7 @@ server.on('upgrade', (request, socket, head) => {
 // ===========================================================================
 function handleTerminalConnection(ws) {
   console.log('[LCO Backend] Terminal client connected (PTY:', PTY_AVAILABLE, ')');
+  console.log('[LCO Backend] New terminal session spawned — each WS gets its own PTY');
 
   let ptyProcess = null;
 
@@ -745,7 +746,7 @@ function handleTerminalConnection(ws) {
       '/usr/bin', '/bin', '/system/bin', '/system/xbin'].join(':');
 
     const env = Object.assign({}, process.env, {
-      TERM: 'xterm-256color',
+      TERM: 'vt100',
       COLORTERM: 'truecolor',
       LCO_ROOT: ROOT,
       CLAUDE_CODE_TMPDIR: (process.env.HOME || '/data/data/com.termux/files/home') + '/.tmp',
@@ -782,7 +783,7 @@ function handleTerminalConnection(ws) {
 
       // PTY exit
       ptyProcess.onExit(({ exitCode, signal }) => {
-        console.log('[LCO Backend] PTY exited with code', exitCode, 'signal', signal);
+        console.log('[LCO Backend] PTY exited code:', exitCode, 'signal:', signal);
         if (ws.readyState === WebSocket.OPEN) {
           wsSend(ws, {
             type: 'output',

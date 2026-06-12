@@ -261,13 +261,11 @@
     }
   </script>
 
-  <!-- xterm.js + addons (local primary, CDN fallback) -->
+  <!-- xterm.js + addons (local bundle; clear AMD to avoid Monaco conflict) -->
+  <script>if(typeof define==='function'&&define.amd)window._amd_define=define,define=undefined;</script>
   <script src="vendor/xterm/xterm.js"></script>
-  <script>window._xterm_local_ok = (typeof Terminal !== 'undefined'); if(!window._xterm_local_ok){ document.write('<script src="https://cdn.jsdelivr.net/npm/@xterm/xterm@5.5.0/lib/xterm.js"><\/script>'); }</script>
   <script src="vendor/xterm/addon-fit.js"></script>
-  <script>window._fit_local_ok = (typeof FitAddon !== 'undefined'); if(!window._fit_local_ok){ document.write('<script src="https://cdn.jsdelivr.net/npm/@xterm/addon-fit@0.10.0/lib/addon-fit.js"><\/script>'); }</script>
   <script src="vendor/xterm/addon-web-links.js"></script>
-  <script>window._weblinks_local_ok = (typeof WebLinksAddon !== 'undefined'); if(!window._weblinks_local_ok){ document.write('<script src="https://cdn.jsdelivr.net/npm/@xterm/addon-web-links@0.11.0/lib/addon-web-links.js"><\/script>'); }</script>
 
   <!-- LCO components (loaded after Monaco and xterm are available) -->
   <script src="js/file-explorer.js"></script>

@@ -56,15 +56,11 @@
 
   function init() {
     terminalContainer = document.getElementById('terminal-container');
-    if (!terminalContainer) {
-      console.warn('[Terminal] Container not found');
-      return;
-    }
+    if (!terminalContainer) { console.warn('[Terminal] Container not found'); return; }
 
-    // Check if xterm.js is loaded (loaded via CDN script tag in index.html).
-    if (typeof Terminal === 'undefined') {
-      console.warn('[Terminal] xterm.js not loaded yet, retrying...');
-      setTimeout(init, 500);
+    // Guard: wait for xterm.js + addons to fully load
+    if (typeof Terminal === 'undefined' || typeof FitAddon === 'undefined') {
+      setTimeout(init, 200);
       return;
     }
 
@@ -422,18 +418,44 @@
     function connectWs() {
       try { tabWs = new WebSocket(WS_URL); } catch(e) { return; }
       tabWs.onopen = function () {
-        tabWs.send(JSON.stringify({ type: 'resize', cols: t.cols, rows: t.rows }));
+        // Delay resize until xterm DOM is laid out
+        setTimeout(function () {
+          var c = t.cols > 0 ? t.cols : 80;
+          var r = t.rows > 0 ? t.rows : 24;
+          tabWs.send(JSON.stringify({ type: 'resize', cols: c, rows: r }));
+          console.log('[Terminal] Force resize tab ' + id + ':', c, 'x', r);
+        }, 150);
       };
+      // Buffer for reassembling fragmented messages (same as main terminal)
+      var tabBuf = '';
       tabWs.onmessage = function (event) {
-        try {
-          var msg = JSON.parse(event.data);
-          if (msg.type === 'output') {
-            var d = msg.data || '';
-            try { d = decodeURIComponent(d); } catch(_) {}
-            t.write(d);
+        tabBuf += event.data;
+        while (tabBuf.length > 0) {
+          var pipeIdx = tabBuf.indexOf('|');
+          if (pipeIdx > 0 && pipeIdx < 10) {
+            var lenStr = tabBuf.substring(0, pipeIdx);
+            var msgLen = parseInt(lenStr, 10);
+            if (!isNaN(msgLen) && tabBuf.length >= pipeIdx + 1 + msgLen) {
+              var jsonStr = tabBuf.substring(pipeIdx + 1, pipeIdx + 1 + msgLen);
+              tabBuf = tabBuf.substring(pipeIdx + 1 + msgLen);
+              try { tabProcessMsg(JSON.parse(jsonStr)); } catch(_) {}
+              continue;
+            } else if (!isNaN(msgLen)) { break; }
           }
-        } catch(e) {}
+          try {
+            var msg = JSON.parse(tabBuf);
+            tabBuf = '';
+            tabProcessMsg(msg);
+          } catch (e) { break; }
+        }
       };
+      function tabProcessMsg(msg) {
+        if (msg.type === 'output') {
+          var d = msg.data || '';
+          try { d = decodeURIComponent(d); } catch(_) {}
+          t.write(d);
+        }
+      }
       tabWs.onclose = function () { setTimeout(connectWs, 3000); };
     }
     connectWs();
@@ -447,6 +469,8 @@
     var tabObj = { id: id, xterm: t, wrapper: wrapper, ws: tabWs, fitAddon: fit };
     tabList.push(tabObj);
     switchToTab(id);
+    // Focus the new terminal so keyboard input works immediately
+    setTimeout(function () { try { t.focus(); } catch(e) {} }, 200);
     return id;
   }
 
@@ -467,6 +491,11 @@
       }
       try { active.xterm.refresh(0, active.xterm.rows - 1); } catch(e) {}
     }, 60);
+    // Send resize to WS to wake up bash PS1
+    if (active.ws && active.ws.readyState === WebSocket.OPEN) {
+      var c = active.xterm.cols || 80, r = active.xterm.rows || 24;
+      active.ws.send(JSON.stringify({ type: 'resize', cols: c, rows: r }));
+    }
     // Focus the terminal so keyboard input reaches xterm
     setTimeout(function () { try { active.xterm.focus(); } catch(e) {} }, 100);
 
@@ -482,16 +511,22 @@
   }
 
   function closeTerminalTab(id) {
-    if (tabList.length <= 1) return;
+    // Always allow closing — if last tab, reconnect fresh
     var tab = tabList.find(function (t) { return t.id === id; });
     if (!tab) return;
+    // Kill WebSocket (backend kills PTY)
     if (tab.ws) { try { tab.ws.close(); } catch(e) {} }
     tab.xterm.dispose();
     if (tab.wrapper.parentNode) tab.wrapper.parentNode.removeChild(tab.wrapper);
     tabList = tabList.filter(function (t) { return t.id !== id; });
     var tabEl = document.querySelector('.terminal-tab[data-tab-id="' + id + '"]');
     if (tabEl) tabEl.remove();
-    if (tabList.length > 0) switchToTab(tabList[0].id);
+    if (tabList.length > 0) {
+      switchToTab(tabList[0].id);
+    } else {
+      // All tabs closed — auto-create fresh one
+      createTerminalTab();
+    }
   }
 
   window.LCOTerminal = {
