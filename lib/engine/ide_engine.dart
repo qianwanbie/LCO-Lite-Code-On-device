@@ -44,6 +44,9 @@ abstract class IDEEngine {
   /// Open a URL in the device browser.
   Future<JsonRpcResponse> openUrl(String url);
 
+  /// Deployment RPC passthrough (deployStatus, deployInstall).
+  Future<JsonRpcResponse> deployRpc(String method, Map<String, dynamic> params);
+
   /// One-time initialization. Called once after the engine is constructed.
   ///
   /// [MockEngine] creates its temp directory here.

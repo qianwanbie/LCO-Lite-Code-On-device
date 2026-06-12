@@ -80,6 +80,10 @@ class TermuxEngine implements IDEEngine {
       _sendRpc('openUrl', {'url': url});
 
   @override
+  Future<JsonRpcResponse> deployRpc(String method, Map<String, dynamic> params) =>
+      _sendRpc(method, params);
+
+  @override
   Stream<FileChangeEvent> get fileChangeStream => _fileChangeController.stream;
 
   @override

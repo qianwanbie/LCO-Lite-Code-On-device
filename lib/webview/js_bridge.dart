@@ -177,6 +177,12 @@ class JSBridge {
         final url = params['url'] as String? ?? '';
         return _withId(await _engine.openUrl(url), id);
 
+      case 'deployStatus':
+      case 'deployInstall':
+        // Route directly — pass all params
+        final deployParams = Map<String, dynamic>.from(params);
+        return _withId(await _engine.deployRpc(method, deployParams), id);
+
       default:
         return JsonRpcResponse.error(
           id: id,

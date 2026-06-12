@@ -29,14 +29,33 @@
     document.getElementById('lco-deploy-close')?.addEventListener('click', hide);
     modal.addEventListener('click', function (e) { if (e.target === modal) hide(); });
 
+    // Select All checkbox
+    var selectAllRow = document.createElement('div');
+    selectAllRow.style.cssText = 'padding:6px 0;border-bottom:1px solid var(--lco-border)';
+    selectAllRow.innerHTML = '<label style="cursor:pointer"><input type="checkbox" id="tool-select-all"> <b>Select All</b></label>';
+    listEl.appendChild(selectAllRow);
+
     // Render tool checklist
     TOOLS.forEach(function (t) {
       var row = document.createElement('div');
-      row.style.cssText = 'display:flex;align-items:center;padding:6px 0;border-bottom:1px solid var(--lco-border)';
-      row.innerHTML = '<input type="checkbox" id="tool-' + t.id + '" ' + (t.id === 'node' ? 'checked disabled' : '') + '> ' +
-        '<label for="tool-' + t.id + '" style="flex:1;cursor:pointer"><b>' + t.name + '</b><br><small>' + t.desc + '</small></label>';
+      row.style.cssText = 'display:flex;align-items:flex-start;padding:6px 0;border-bottom:1px solid var(--lco-border)';
+      var disabled = t.id === 'node' ? 'checked disabled' : '';
+      row.innerHTML = '<input type="checkbox" id="tool-' + t.id + '" ' + disabled + ' style="margin-top:2px;flex-shrink:0"> ' +
+        '<label for="tool-' + t.id + '" style="cursor:pointer;margin-left:6px"><b>' + t.name + '</b><br><small style="color:var(--lco-text-muted)">' + t.desc + '</small></label>';
       listEl.appendChild(row);
     });
+
+    // Select All logic
+    var selectAllCb = document.getElementById('tool-select-all');
+    if (selectAllCb) {
+      selectAllCb.addEventListener('change', function () {
+        var checked = selectAllCb.checked;
+        TOOLS.forEach(function (t) {
+          var cb = document.getElementById('tool-' + t.id);
+          if (cb && !cb.disabled) cb.checked = checked;
+        });
+      });
+    }
 
     if (allBtn) allBtn.addEventListener('click', runDeploy);
     console.log('[Deploy] Initialized');
