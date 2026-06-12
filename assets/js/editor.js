@@ -212,6 +212,18 @@
     editor.focus();
     console.log('[LCO] Monaco Editor created and focused.');
 
+    // Terminal toggle button in status bar
+    var toggleBtn = document.getElementById('lco-toggle-terminal');
+    if (toggleBtn) {
+      toggleBtn.addEventListener('click', function () {
+        var panel = document.getElementById('lco-terminal-panel');
+        if (panel) {
+          panel.classList.toggle('collapsed');
+          window.dispatchEvent(new CustomEvent('lco-terminal-resized'));
+        }
+      });
+    }
+
     // Hide loading overlay.
     var overlay = document.getElementById('loading-overlay');
     if (overlay) overlay.classList.add('hidden');

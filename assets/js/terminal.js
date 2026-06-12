@@ -370,42 +370,154 @@
   // Public API
   // ---------------------------------------------------------------------------
 
+  // ── Multi-Tab Support ──
+  var tabList = [];
+  var activeTabId = null;
+  var tabCounter = 1;
+
+  // Register existing terminal as tab 1
+  (function registerTab1() {
+    var tc = document.getElementById('terminal-container');
+    if (!tc || !terminal) { setTimeout(registerTab1, 500); return; }
+    var wrapper = document.createElement('div');
+    wrapper.className = 'xterm-tab-content';
+    wrapper.setAttribute('data-tab-id', '1');
+    wrapper.style.cssText = 'width:100%;height:100%;';
+    // Move the existing xterm element into the wrapper
+    var xtermEl = tc.querySelector('.xterm');
+    if (xtermEl) {
+      xtermEl.parentNode.insertBefore(wrapper, xtermEl);
+      wrapper.appendChild(xtermEl);
+    }
+    tabList.push({ id: 1, xterm: terminal, wrapper: wrapper, ws: ws, fitAddon: fitAddon });
+    activeTabId = 1;
+    // Highlight tab 1 in bar
+    var t1 = document.querySelector('.terminal-tab[data-tab-id="1"]');
+    if (t1) t1.classList.add('active');
+  })();
+
+  function createTerminalTab() {
+    tabCounter++;
+    var id = tabCounter;
+    var tc = document.getElementById('terminal-container');
+
+    // Create wrapper
+    var wrapper = document.createElement('div');
+    wrapper.className = 'xterm-tab-content';
+    wrapper.setAttribute('data-tab-id', id);
+    wrapper.style.cssText = 'width:100%;height:100%;display:none;';
+    tc.appendChild(wrapper);
+
+    // Create xterm
+    var t = new Terminal({
+      cursorBlink: true, cursorStyle: 'bar', fontSize: 13,
+      fontFamily: "'Cascadia Code', 'Fira Code', 'Consolas', monospace",
+      theme: (terminal ? terminal.options.theme : {}),
+      allowProposedApi: true, scrollback: 5000, tabStopWidth: 2,
+    });
+    var fit = new FitAddon.FitAddon();
+    t.loadAddon(fit);
+    t.open(wrapper);
+    setTimeout(function () { try { fit.fit(); } catch(e) {} }, 100);
+
+    // WebSocket
+    var tabWs = null;
+    function connectWs() {
+      try { tabWs = new WebSocket(WS_URL); } catch(e) { return; }
+      tabWs.onopen = function () {
+        tabWs.send(JSON.stringify({ type: 'resize', cols: t.cols, rows: t.rows }));
+      };
+      tabWs.onmessage = function (event) {
+        try {
+          var msg = JSON.parse(event.data);
+          if (msg.type === 'output') {
+            var d = msg.data || '';
+            try { d = decodeURIComponent(d); } catch(_) {}
+            t.write(d);
+          }
+        } catch(e) {}
+      };
+      tabWs.onclose = function () { setTimeout(connectWs, 3000); };
+    }
+    connectWs();
+
+    t.onData(function (data) {
+      if (tabWs && tabWs.readyState === WebSocket.OPEN) {
+        tabWs.send(JSON.stringify({ type: 'input', data: data }));
+      }
+    });
+
+    var tabObj = { id: id, xterm: t, wrapper: wrapper, ws: tabWs, fitAddon: fit };
+    tabList.push(tabObj);
+    switchToTab(id);
+    return id;
+  }
+
+  function switchToTab(id) {
+    tabList.forEach(function (t) {
+      t.wrapper.style.display = (t.id === id) ? '' : 'none';
+    });
+    activeTabId = id;
+    document.querySelectorAll('.terminal-tab').forEach(function (el) {
+      el.classList.toggle('active', parseInt(el.getAttribute('data-tab-id')) === id);
+    });
+    var active = tabList.find(function (t) { return t.id === id; });
+    if (active && active.fitAddon) {
+      setTimeout(function () { try { active.fitAddon.fit(); } catch(e) {} }, 50);
+    }
+  }
+
+  function closeTerminalTab(id) {
+    if (tabList.length <= 1) return;
+    var tab = tabList.find(function (t) { return t.id === id; });
+    if (!tab) return;
+    if (tab.ws) { try { tab.ws.close(); } catch(e) {} }
+    tab.xterm.dispose();
+    if (tab.wrapper.parentNode) tab.wrapper.parentNode.removeChild(tab.wrapper);
+    tabList = tabList.filter(function (t) { return t.id !== id; });
+    var tabEl = document.querySelector('.terminal-tab[data-tab-id="' + id + '"]');
+    if (tabEl) tabEl.remove();
+    if (tabList.length > 0) switchToTab(tabList[0].id);
+  }
+
+  // New tab button handler
+  var newTabBtn = document.getElementById('lco-terminal-new-tab');
+  if (newTabBtn) {
+    newTabBtn.addEventListener('click', function () { createTerminalTab(); });
+  }
+
   window.LCOTerminal = {
-    /** Write text to the terminal (used by other components). */
     write: function (text) {
-      if (terminal) terminal.write(text);
+      var t = tabList.find(function (x) { return x.id === activeTabId; });
+      if (t && t.xterm) t.xterm.write(text);
     },
-
-    /** Clear the terminal. */
     clear: function () {
-      if (terminal) terminal.clear();
+      var t = tabList.find(function (x) { return x.id === activeTabId; });
+      if (t && t.xterm) t.xterm.clear();
     },
-
-    /** Check if WebSocket is connected. */
     isConnected: function () {
-      return isConnected;
+      var t = tabList.find(function (x) { return x.id === activeTabId; });
+      return t && t.ws && t.ws.readyState === WebSocket.OPEN;
     },
-
-    /** Manually connect/reconnect. */
-    connect: connect,
-
-    /** Focus the terminal. */
+    connect: function () { /* reconnect active tab */ },
     focus: function () {
-      if (terminal) terminal.focus();
+      var t = tabList.find(function (x) { return x.id === activeTabId; });
+      if (t && t.xterm) t.xterm.focus();
     },
-
-    /** Handle resize (called by external resize logic). */
-    handleResize: handleResize,
-
-    /** Get the xterm Terminal instance (for advanced usage). */
+    handleResize: function () {
+      tabList.forEach(function (t) {
+        if (t.fitAddon) { try { t.fitAddon.fit(); } catch(e) {} }
+      });
+    },
     getTerminal: function () {
-      return terminal;
+      var t = tabList.find(function (x) { return x.id === activeTabId; });
+      return t ? t.xterm : null;
     },
-
-    /** Set the WebSocket URL. */
-    setWsUrl: function (url) {
-      WS_URL = url;
-    },
+    setWsUrl: function (url) { WS_URL = url; },
+    createTab: createTerminalTab,
+    switchTab: switchToTab,
+    closeTab: closeTerminalTab,
+    getTabCount: function () { return tabList.length; },
   };
 
   // ---------------------------------------------------------------------------

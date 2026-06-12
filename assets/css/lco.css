@@ -114,6 +114,42 @@ html, body {
 }
 .claude-badge.hidden { display: none; }
 
+/* ── Web Preview Panel ── */
+#lco-preview-panel {
+  width: 360px; min-width: 200px; background: #fff;
+  border-left: 1px solid var(--lco-border);
+  display: flex; flex-direction: column;
+}
+#lco-preview-panel.hidden { display: none !important; }
+#lco-preview-header {
+  padding: 6px 8px; background: #2d2d30; border-bottom: 1px solid var(--lco-border);
+  display: flex; justify-content: space-between; align-items: center; gap: 6px;
+}
+#lco-preview-header span { font-size: 11px; font-weight: 600; color: var(--lco-text-muted); white-space: nowrap; }
+#lco-preview-url {
+  flex: 1; background: #3c3c3c; color: var(--lco-text);
+  border: 1px solid var(--lco-border); border-radius: 3px;
+  padding: 3px 6px; font-size: 11px; font-family: monospace; outline: none;
+}
+#lco-preview-go {
+  background: none; border: none; color: var(--lco-text-muted);
+  cursor: pointer; font-size: 14px;
+}
+#lco-preview-go:hover { color: var(--lco-accent); }
+#lco-preview-close {
+  background: none; border: none; color: var(--lco-text-muted);
+  cursor: pointer; font-size: 14px;
+}
+#lco-preview-close:hover { color: var(--lco-error); }
+#lco-preview-container {
+  flex: 1; background: #fff; display: flex; align-items: center; justify-content: center;
+}
+#lco-preview-placeholder { color: #999; text-align: center; font-size: 12px; padding: 20px; }
+#lco-toolbar button.preview-btn { border-color: #569cd6; color: #569cd6; }
+
+/* ── Terminal Tab Content ── */
+.xterm-tab-content { position: absolute; top: 0; left: 0; }
+
 /* ── Modal ── */
 .modal-overlay {
   position: fixed; top: 0; left: 0; right: 0; bottom: 0;
@@ -246,8 +282,15 @@ html, body {
 
 #terminal-container {
   flex: 1;
-  padding: 4px 8px;
+  padding: 0;
   overflow: hidden;
+}
+#terminal-container .xterm {
+  height: 100%;
+}
+#terminal-container .xterm-viewport {
+  overflow-y: auto !important;
+  touch-action: pan-y;
 }
 
 /* ── Terminal Resize Handle ── */
@@ -322,10 +365,10 @@ html, body {
 .lco-tree-node .chevron {
   width: 16px; height: 16px;
   font-size: 10px;
-  text-align: center;
-  line-height: 16px;
+  text-align: center; line-height: 16px;
   transition: transform 0.15s;
   flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
 }
 .lco-tree-node .chevron.expanded { transform: rotate(90deg); }
 
@@ -333,6 +376,22 @@ html, body {
   overflow: hidden;
 }
 .lco-tree-children.collapsed { display: none; }
+
+/* ── Tree Connectors ── */
+.lco-tree-node { position: relative; }
+.lco-tree-node::before {
+  content: ''; position: absolute;
+  left: 16px; top: 0; bottom: 0;
+  width: 1px; background: #3c3c3c;
+}
+.lco-tree-node:last-child::before { height: 50%; }
+.lco-tree-node::after {
+  content: ''; position: absolute;
+  left: 16px; top: 50%;
+  width: 8px; height: 1px; background: #3c3c3c;
+}
+.lco-tree-node[style*="padding-left: 8px;"]::before,
+.lco-tree-node[style*="padding-left: 8px;"]::after { display: none; }
 
 /* ── Context Menu ── */
 #lco-context-menu {
@@ -437,6 +496,12 @@ html, body {
 #lco-status-bar.error   { background: var(--lco-error); }
 #lco-status-bar.info    { background: #569cd6; }
 #lco-status-bar.warn    { background: var(--lco-warn); }
+#lco-status-right { display: flex; gap: 4px; }
+#lco-toggle-terminal {
+  background: none; border: none; color: #fff; cursor: pointer;
+  font-size: 14px; padding: 0 6px; opacity: 0.7;
+}
+#lco-toggle-terminal:hover { opacity: 1; }
 
 /* ── Scrollbar ── */
 ::-webkit-scrollbar { width: 8px; height: 8px; }

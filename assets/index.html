@@ -92,10 +92,28 @@
 
       </div><!-- /lco-main-area -->
 
+      <!-- ◆◆◆ Web Preview Panel ◆◆◆ -->
+      <div id="lco-preview-panel" class="hidden">
+        <div id="lco-preview-header">
+          <span>◉ PREVIEW</span>
+          <input id="lco-preview-url" type="text" value="http://127.0.0.1:8080" placeholder="http://localhost:PORT">
+          <button id="lco-preview-go" title="Open">→</button>
+          <button id="lco-preview-close" class="close-btn" title="Close">✕</button>
+        </div>
+        <div id="lco-preview-container">
+          <div id="lco-preview-placeholder">Enter URL and press → to preview.<br><small>Run dev server in terminal first.</small></div>
+        </div>
+      </div>
+
     </div><!-- /lco-body -->
 
     <!-- ── Status Bar ── -->
-    <div id="lco-status-bar">LCO — Lite Code On-device</div>
+    <div id="lco-status-bar">
+    <span>LCO — Lite Code On-device</span>
+    <span id="lco-status-right">
+      <button id="lco-toggle-terminal" title="Toggle Terminal">⌨</button>
+    </span>
+  </div>
 
   </div><!-- /lco-app -->
 
@@ -107,6 +125,7 @@
     <button id="lco-btn-save" class="save-btn" title="Save (Ctrl+S)">💾 Save</button>
     <button id="lco-btn-locale" class="locale-btn" title="Toggle language">EN</button>
     <button id="lco-btn-git" class="git-btn" title="Run git status">⎇ Git</button>
+    <button id="lco-btn-preview" class="preview-btn" title="Web Preview">◉</button>
   </div>
 
   <!-- ================================================================= -->
@@ -248,6 +267,7 @@
   <!-- LCO components (loaded after Monaco and xterm are available) -->
   <script src="js/file-explorer.js"></script>
   <script src="js/terminal.js"></script>
+  <script src="js/preview.js"></script>
 
   <!-- Sidebar resize drag handle -->
   <script>
