@@ -116,9 +116,9 @@ html, body {
 
 /* ── Web Preview Panel ── */
 #lco-preview-panel {
-  width: 360px; min-width: 200px; background: #fff;
-  border-left: 1px solid var(--lco-border);
-  display: flex; flex-direction: column;
+  width: 360px; min-width: 200px; max-width: 500px;
+  background: #fff; border-left: 1px solid var(--lco-border);
+  display: flex; flex-direction: column; flex-shrink: 0;
 }
 #lco-preview-panel.hidden { display: none !important; }
 #lco-preview-header {
