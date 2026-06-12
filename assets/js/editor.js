@@ -212,15 +212,25 @@
     editor.focus();
     console.log('[LCO] Monaco Editor created and focused.');
 
-    // Terminal toggle button in status bar
+    // Terminal toggle buttons (status bar + workspace bar)
+    function toggleTerminalPanel() {
+      var panel = document.getElementById('lco-terminal-panel');
+      if (panel) {
+        panel.classList.toggle('collapsed');
+        window.dispatchEvent(new CustomEvent('lco-terminal-resized'));
+      }
+    }
     var toggleBtn = document.getElementById('lco-toggle-terminal');
-    if (toggleBtn) {
-      toggleBtn.addEventListener('click', function () {
-        var panel = document.getElementById('lco-terminal-panel');
-        if (panel) {
-          panel.classList.toggle('collapsed');
-          window.dispatchEvent(new CustomEvent('lco-terminal-resized'));
-        }
+    var toggleBtnWs = document.getElementById('lco-btn-toggle-terminal-ws');
+    if (toggleBtn) toggleBtn.addEventListener('click', toggleTerminalPanel);
+    if (toggleBtnWs) toggleBtnWs.addEventListener('click', toggleTerminalPanel);
+
+    // Preview toggle
+    var previewBtnWs = document.getElementById('lco-btn-toggle-preview-ws');
+    if (previewBtnWs) {
+      previewBtnWs.addEventListener('click', function () {
+        var panel = document.getElementById('lco-preview-panel');
+        if (panel) panel.classList.toggle('hidden');
       });
     }
 

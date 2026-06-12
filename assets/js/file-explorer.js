@@ -369,7 +369,7 @@
 
   function runScriptFile(path, name) {
     var ext = name.split('.').pop().toLowerCase();
-    if (['py', 'js', 'sh', 'dart'].indexOf(ext) < 0) {
+    if (['py', 'js', 'sh', 'dart', 'html'].indexOf(ext) < 0) {
       updateStatus('⚠ Unsupported type: .' + ext, 'warn');
       return;
     }
