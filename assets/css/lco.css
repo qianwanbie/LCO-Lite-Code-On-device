@@ -17,7 +17,38 @@
   --lco-sidebar-width: 240px;
   --lco-terminal-height: 200px;
   --lco-status-bar-height: 22px;
-  --lco-toolbar-height: 0px; /* toolbar is floating, overlay */
+  
+}
+
+/* ── Top Bar ── */
+#lco-topbar {
+  height: 30px; min-height: 30px;
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 0 10px;
+  background: var(--lco-topbar-bg, #323233);
+  border-bottom: 1px solid var(--lco-border);
+  z-index: 50000;
+}
+#lco-topbar-title {
+  font-size: 12px; font-weight: 600; color: var(--lco-text);
+  letter-spacing: 0.5px;
+}
+#lco-topbar-actions { display: flex; gap: 2px; }
+#lco-topbar-actions button {
+  background: none; border: none; color: var(--lco-text-muted);
+  cursor: pointer; font-size: 14px; padding: 2px 6px; border-radius: 4px;
+}
+#lco-topbar-actions button:hover { background: rgba(255,255,255,0.1); color: var(--lco-text); }
+
+/* ── Light Mode ── */
+.light-mode {
+  --lco-bg: #ffffff;
+  --lco-bg-sidebar: #f3f3f3;
+  --lco-bg-panel: #ffffff;
+  --lco-border: #e0e0e0;
+  --lco-text: #333333;
+  --lco-text-muted: #888888;
+  --lco-topbar-bg: #dddddd;
 }
 
 /* ── Reset ── */
@@ -146,7 +177,6 @@ html, body {
   flex: 1; background: #fff; display: flex; align-items: center; justify-content: center;
 }
 #lco-preview-placeholder { color: #999; text-align: center; font-size: 12px; padding: 20px; }
-#lco-toolbar button.preview-btn { border-color: #569cd6; color: #569cd6; }
 
 /* ── Terminal Tab Content ── */
 #terminal-container { position: relative; }
@@ -247,6 +277,7 @@ html, body {
   height: var(--lco-terminal-height);
   min-height: 40px;
   max-height: 60%;
+  margin-bottom: var(--lco-status-bar-height);
   border-top: 1px solid var(--lco-border);
   display: flex;
   flex-direction: column;
@@ -483,35 +514,6 @@ html, body {
 /* ── Floating Toolbar ── */
 #lco-toolbar {
   position: fixed;
-  top: 6px; right: 6px;
-  z-index: 50001;
-  display: flex; gap: 4px;
-  opacity: 0.92;
-  background: #252526; border: 1px solid #555;
-  border-radius: 6px; padding: 4px 6px;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.5);
-}
-#lco-toolbar button {
-  background: #3c3c3c; color: #ccc;
-  border: 1px solid #555; border-radius: 4px;
-  padding: 6px 10px; font-size: 12px;
-  cursor: pointer; font-family: inherit;
-  white-space: nowrap; user-select: none;
-  -webkit-user-select: none;
-  transition: background 0.15s, border-color 0.15s;
-}
-#lco-toolbar button:active {
-  background: var(--lco-accent);
-  border-color: var(--lco-accent);
-  color: #fff;
-}
-#lco-toolbar button.test-btn   { border-color: var(--lco-accent-alt); color: var(--lco-accent-alt); }
-#lco-toolbar button.save-btn   { border-color: #dcdcaa; color: #dcdcaa; }
-#lco-toolbar button.locale-btn { border-color: #569cd6; color: #569cd6; }
-#lco-toolbar button.git-btn    { border-color: var(--lco-warn); color: var(--lco-warn); }
-
-/* ── Status Bar ── */
-#lco-status-bar {
   height: var(--lco-status-bar-height);
   line-height: var(--lco-status-bar-height);
   padding: 0 10px;
@@ -533,6 +535,40 @@ html, body {
   font-size: 14px; padding: 0 6px; opacity: 0.7;
 }
 #lco-toggle-terminal:hover { opacity: 1; }
+
+/* ── Virtual Keyboard Bar ── */
+#lco-keyboard-bar {
+  display: flex; gap: 2px; padding: 4px 6px;
+  background: #1a1a1a; border-top: 1px solid var(--lco-border);
+  overflow-x: auto; z-index: 100;
+}
+#lco-keyboard-bar.hidden { display: none !important; }
+#lco-keyboard-bar button {
+  background: #2d2d2d; color: #ccc; border: 1px solid #444;
+  border-radius: 4px; padding: 6px 10px; font-size: 12px;
+  cursor: pointer; font-family: monospace; white-space: nowrap;
+  transition: background 0.1s;
+}
+#lco-keyboard-bar button:active { background: var(--lco-accent); color: #fff; }
+
+/* ── Settings Modal ── */
+.setting-row {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 10px 0; border-bottom: 1px solid var(--lco-border);
+}
+.setting-row span { color: var(--lco-text); }
+.setting-row button, .setting-row select {
+  background: #3c3c3c; color: var(--lco-text); border: 1px solid var(--lco-border);
+  border-radius: 4px; padding: 5px 12px; font-size: 12px; cursor: pointer;
+}
+.modal-body h3 { color: var(--lco-accent); margin: 12px 0 6px; font-size: 13px; }
+.modal-body p { margin: 4px 0; font-size: 12px; line-height: 1.6; }
+.modal-body code { background: #333; padding: 1px 4px; border-radius: 3px; font-size: 11px; }
+
+/* ── UI Polish ── */
+button { border-radius: 6px; transition: all 0.15s; }
+button:hover { filter: brightness(1.2); }
+.terminal-tab { border-radius: 4px 4px 0 0; }
 
 /* ── Scrollbar ── */
 ::-webkit-scrollbar { width: 8px; height: 8px; }

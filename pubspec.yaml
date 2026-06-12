@@ -29,6 +29,7 @@ flutter:
     - assets/js/file-explorer.js
     - assets/js/terminal.js
     - assets/js/preview.js
+    - assets/js/ui.js
     - assets/monaco-editor/min/vs/
     - assets/monaco-editor/min/vs/editor/
     - assets/monaco-editor/min/vs/assets/

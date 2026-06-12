@@ -153,8 +153,7 @@ class _EditorWebViewState extends State<EditorWebView> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: SafeArea(
-        child: Stack(
+      body: Stack(
           children: [
             WebViewWidget(controller: _controller),
             if (!_isEditorReady)
@@ -170,7 +169,6 @@ class _EditorWebViewState extends State<EditorWebView> {
               ),
           ],
         ),
-      ),
     );
   }
 }
