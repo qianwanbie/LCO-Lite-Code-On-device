@@ -16,7 +16,7 @@
 - **Claude CLI** — Run `claude` directly in the terminal for AI-assisted coding
 - **LLM Chat Adapter** — JSON-RPC chat with DeepSeek/Anthropic/OpenAI APIs (configurable via llm_config.json)
 - **Dark/Light Mode** — Theme toggle with CSS variable system
-- **One-Click Setup** — Deployment Center auto-installs Git, Python, Claude CLI, and more in Termux
+- **Setup Wizard** — First-launch guide with copyable Termux commands for tools + backend
 - **i18n** — English/Chinese language toggle
 - **Offline-First** — Monaco Editor and xterm.js bundled locally, no CDN dependency
 - **Multi-Tab Terminal** — Create, switch, and close independent terminal sessions, each with its own PTY process
