@@ -375,15 +375,13 @@
   var activeTabId = null;
   var tabCounter = 1;
 
-  // Register existing terminal as tab 1
-  (function registerTab1() {
+  function registerExistingTerminal() {
     var tc = document.getElementById('terminal-container');
-    if (!tc || !terminal) { setTimeout(registerTab1, 500); return; }
+    if (!tc || !terminal) return;
     var wrapper = document.createElement('div');
     wrapper.className = 'xterm-tab-content';
     wrapper.setAttribute('data-tab-id', '1');
     wrapper.style.cssText = 'width:100%;height:100%;';
-    // Move the existing xterm element into the wrapper
     var xtermEl = tc.querySelector('.xterm');
     if (xtermEl) {
       xtermEl.parentNode.insertBefore(wrapper, xtermEl);
@@ -391,10 +389,11 @@
     }
     tabList.push({ id: 1, xterm: terminal, wrapper: wrapper, ws: ws, fitAddon: fitAddon });
     activeTabId = 1;
-    // Highlight tab 1 in bar
     var t1 = document.querySelector('.terminal-tab[data-tab-id="1"]');
     if (t1) t1.classList.add('active');
-  })();
+  }
+  // Call after init completes (terminal is ready)
+  setTimeout(registerExistingTerminal, 200);
 
   function createTerminalTab() {
     tabCounter++;

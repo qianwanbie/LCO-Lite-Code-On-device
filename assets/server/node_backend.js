@@ -43,7 +43,7 @@ const PORT = parseInt(process.argv.find(a => a.startsWith('--port='))?.split('='
 // terminal cwd, and file watcher is anchored to this path.
 // Path traversal is prevented by resolvePath().
 const PROJECT_ROOT = '/data/data/com.termux/files/home/lco-workspace';
-const ROOT = process.argv.find(a => a.startsWith('--root='))?.split('=')[1] || PROJECT_ROOT;
+let ROOT = process.argv.find(a => a.startsWith('--root='))?.split('=')[1] || PROJECT_ROOT;
 
 // Ensure workspace root exists
 if (!fs.existsSync(ROOT)) {
@@ -503,6 +503,8 @@ async function dispatchRpc(id, method, params) {
           }
         });
 
+        // Update global ROOT so listFiles/saveFile/readFile use new workspace
+        ROOT = newRoot;  // ← this actually changes the workspace root
         broadcastFileTreeRefresh();
         return jsonResult(id, { ok: true, workspace: path.basename(newRoot), path: newRoot });
       }

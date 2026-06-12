@@ -285,13 +285,18 @@ html, body {
   flex: 1;
   padding: 0;
   overflow: hidden;
+  position: relative;
 }
 #terminal-container .xterm {
   height: 100%;
+  padding: 4px;
+}
+#terminal-container .xterm-screen {
+  height: 100% !important;
 }
 #terminal-container .xterm-viewport {
-  overflow-y: auto !important;
-  touch-action: pan-y;
+  overflow-y: scroll !important;
+  -webkit-overflow-scrolling: touch;
 }
 
 /* ── Terminal Resize Handle ── */
