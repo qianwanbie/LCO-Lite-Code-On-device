@@ -148,7 +148,8 @@ html, body {
 #lco-toolbar button.preview-btn { border-color: #569cd6; color: #569cd6; }
 
 /* ── Terminal Tab Content ── */
-.xterm-tab-content { position: absolute; top: 0; left: 0; }
+#terminal-container { position: relative; }
+.xterm-tab-content { position: absolute; top: 0; left: 0; right: 0; bottom: 0; }
 
 /* ── Modal ── */
 .modal-overlay {
