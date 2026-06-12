@@ -186,8 +186,23 @@
     </div>
   </div>
 
+  <!-- FAB (Floating Action Button) -->
+  <div id="lco-fab" class="hidden">
+    <button id="lco-fab-save" title="Save">💾</button>
+    <button id="lco-fab-run" title="Run">▶</button>
+  </div>
+
+  <!-- Bottom Navigation Bar -->
+  <div id="lco-navbar">
+    <button class="nav-btn active" data-tab="explorer">📁 Files</button>
+    <button class="nav-btn" data-tab="editor">📝 Editor</button>
+    <button class="nav-btn" data-tab="terminal">⬛ Terminal</button>
+    <button class="nav-btn" data-tab="preview">◉ Preview</button>
+    <button class="nav-btn" data-tab="settings">⚙ Settings</button>
+  </div>
+
   <div id="lco-status-bar">
-    <span>LCO — Lite Code On-device</span>
+    <span>LCO v1.0.0</span>
     <span id="lco-status-right">
       <button id="lco-toggle-terminal" title="Toggle Terminal">⌨</button>
     </span>
@@ -338,6 +353,7 @@
   <script src="js/preview.js"></script>
   <script src="js/ui.js"></script>
   <script src="js/deploy.js"></script>
+  <script src="js/nav.js"></script>
 
   <!-- Sidebar resize drag handle -->
   <script>

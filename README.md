@@ -1,6 +1,9 @@
-# LCO — Lite Code On-device
+# LCO — Lite Code On-device (v1.0.0)
 
-A lightweight Android IDE that brings VS Code-level editing to mobile devices. Powered by Monaco Editor, xterm.js, Flutter WebView, and a Node.js backend in Termux.
+[![LCO v1.0.0 Release](https://img.shields.io/badge/Download-LCO_v1.0.0_APK-blue?logo=android)](https://github.com/qianwanbie/LCO-Lite-Code-On-device/releases/tag/v1.0.0)
+
+---
+*LCO v1.0.0: A self-contained mobile development workstation with multi-tab terminal, Git, AI assistant, and local web preview.* Powered by Monaco Editor, xterm.js, Flutter WebView, and a Node.js backend in Termux.
 
 ## Features
 
@@ -212,6 +215,13 @@ npm pack @xterm/addon-web-links@0.11.0
 | Gradle download fails | Use Tencent mirror + file:// URL in gradle-wrapper.properties |
 | `Can only have one anonymous define` | Monaco loader.js loaded twice — known issue, non-fatal |
 | Claude CLI permission denied | Set `CLAUDE_CODE_TMPDIR=$HOME/.tmp` in .bashrc |
+
+## Roadmap
+
+- [x] **v1.0.0** — Multi-tab terminal, Git, file explorer, web preview, LLM chat adapter, dark/light mode, deployment center
+- [ ] **v1.1** — Native Android file picker (SAF), open large projects
+- [ ] **v1.2** — Self-contained Node.js backend (no Termux required for basic features)
+- [ ] **v2.0** — Plugin system, LSP integration, remote dev via SSH
 
 ## License
 
