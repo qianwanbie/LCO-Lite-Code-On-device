@@ -82,11 +82,13 @@
         <!-- Integrated Terminal Panel -->
         <div id="lco-terminal-panel">
           <div id="lco-terminal-header">
-            <span id="lco-terminal-header-text">TERMINAL</span>
+            <div id="lco-terminal-tabs">
+              <div class="terminal-tab active" data-tab-id="1">Terminal 1</div>
+            </div>
             <span class="terminal-actions">
-              <button id="lco-terminal-max" title="Maximize/Restore">◻</button>
-              <button id="lco-terminal-clear" title="Clear">⌧</button>
-              <button id="lco-terminal-close" class="close-btn" title="Collapse">✕</button>
+              <button id="lco-terminal-new-tab" title="New Terminal">+</button>
+              <button id="lco-terminal-minimize" title="Minimize">−</button>
+              <button id="lco-terminal-close-tab" class="close-btn" title="Kill Terminal">✕</button>
             </span>
           </div>
           <div id="terminal-container"></div>

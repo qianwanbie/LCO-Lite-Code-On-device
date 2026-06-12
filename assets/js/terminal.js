@@ -32,6 +32,11 @@
   var reconnectAttempts = 0;
 
   var WS_URL = 'ws://127.0.0.1:9876/ws/terminal';
+  var tabCounter = 1;
+
+  function makeWsUrl(tabId) {
+    return WS_URL + '?tabId=' + tabId;
+  }
 
   // ---------------------------------------------------------------------------
   // Banner
@@ -303,44 +308,23 @@
   // ---------------------------------------------------------------------------
 
   function attachActions() {
-    var btnClear = document.getElementById('lco-terminal-clear');
-    var btnClose = document.getElementById('lco-terminal-close');
-    var btnMax   = document.getElementById('lco-terminal-max');
+    var btnNew  = document.getElementById('lco-terminal-new-tab');
+    var btnMin  = document.getElementById('lco-terminal-minimize');
+    var btnClose = document.getElementById('lco-terminal-close-tab');
 
-    if (btnClear) {
-      btnClear.addEventListener('click', function () {
-        if (terminal) terminal.clear();
-      });
-    }
+    // + New terminal tab
+    if (btnNew) btnNew.addEventListener('click', function () { createTerminalTab(); });
 
-    if (btnClose) {
-      btnClose.addEventListener('click', function () {
-        var panel = document.getElementById('lco-terminal-panel');
-        if (panel) panel.classList.toggle('collapsed');
-        window.dispatchEvent(new CustomEvent('lco-terminal-resized'));
-      });
-    }
+    // − Minimize (hide panel, keep PTY alive)
+    if (btnMin) btnMin.addEventListener('click', function () {
+      var panel = document.getElementById('lco-terminal-panel');
+      if (panel) { panel.classList.add('collapsed'); window.dispatchEvent(new CustomEvent('lco-terminal-resized')); }
+    });
 
-    if (btnMax) {
-      btnMax.addEventListener('click', function () {
-        var panel = document.getElementById('lco-terminal-panel');
-        if (!panel) return;
-        if (panel.style.height === '60%') {
-          panel.style.height = '';
-        } else {
-          panel.style.height = '60%';
-        }
-        window.dispatchEvent(new CustomEvent('lco-terminal-resized'));
-      });
-    }
-
-    // Terminal header drag to resize
-    var header = document.getElementById('lco-terminal-header');
-    if (header) {
-      header.addEventListener('mousedown', function (e) {
-        // handled by main resize logic in editor.js
-      });
-    }
+    // ✕ Kill current tab's PTY
+    if (btnClose) btnClose.addEventListener('click', function () {
+      closeTerminalTab(activeTabId);
+    });
   }
 
   // ---------------------------------------------------------------------------
@@ -393,13 +377,27 @@
     tabList.push({ id: 1, xterm: terminal, wrapper: wrapper, ws: ws, fitAddon: fitAddon });
     activeTabId = 1;
     var t1 = document.querySelector('.terminal-tab[data-tab-id="1"]');
-    if (t1) t1.classList.add('active');
+    if (t1) {
+      t1.classList.add('active');
+      t1.innerHTML = '<span class="tab-name">Terminal 1</span><button class="tab-close" data-tab-id="1">✕</button>';
+      t1.querySelector('.tab-name').addEventListener('click', function () { switchToTab(1); });
+      t1.querySelector('.tab-close').addEventListener('click', function (e) { e.stopPropagation(); closeTerminalTab(1); });
+    }
   }
 
   function createTerminalTab() {
     tabCounter++;
     var id = tabCounter;
     var tc = document.getElementById('terminal-container');
+
+    // Add tab to bar with its own close button
+    var tabEl = document.createElement('div');
+    tabEl.className = 'terminal-tab';
+    tabEl.setAttribute('data-tab-id', id);
+    tabEl.innerHTML = '<span class="tab-name">Terminal ' + id + '</span><button class="tab-close" data-tab-id="' + id + '">✕</button>';
+    tabEl.querySelector('.tab-name').addEventListener('click', function () { switchToTab(id); });
+    tabEl.querySelector('.tab-close').addEventListener('click', function (e) { e.stopPropagation(); closeTerminalTab(id); });
+    document.getElementById('lco-terminal-tabs').appendChild(tabEl);
 
     // Create wrapper
     var wrapper = document.createElement('div');
@@ -462,9 +460,23 @@
       el.classList.toggle('active', parseInt(el.getAttribute('data-tab-id')) === id);
     });
     var active = tabList.find(function (t) { return t.id === id; });
-    if (active && active.fitAddon) {
-      setTimeout(function () { try { active.fitAddon.fit(); } catch(e) {} }, 50);
-    }
+    if (!active) return;
+    // Force fit + refresh after DOM swap
+    setTimeout(function () {
+      if (active.fitAddon) {
+        try { active.fitAddon.fit(); } catch(e) {}
+      }
+      try { active.xterm.refresh(0, active.xterm.rows - 1); } catch(e) {}
+    }, 60);
+    // ResizeObserver: if container width is 0, wait for layout then fit
+    if (active._resizeObs) active._resizeObs.disconnect();
+    active._resizeObs = new ResizeObserver(function () {
+      var w = active.wrapper.offsetWidth;
+      if (w > 0 && active.fitAddon) {
+        try { active.fitAddon.fit(); } catch(e) {}
+      }
+    });
+    active._resizeObs.observe(active.wrapper);
   }
 
   function closeTerminalTab(id) {

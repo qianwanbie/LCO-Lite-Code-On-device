@@ -282,6 +282,30 @@ html, body {
 #lco-terminal-header button:hover { color: var(--lco-text); }
 #lco-terminal-header button.close-btn:hover { color: var(--lco-error); }
 
+/* ── Terminal Tab Bar ── */
+#lco-terminal-tabs {
+  display: flex; gap: 0; overflow-x: auto; flex: 1;
+}
+.terminal-tab {
+  display: flex; align-items: center;
+  padding: 3px 8px; font-size: 11px; cursor: pointer;
+  border-right: 1px solid var(--lco-border);
+  background: #2d2d30; color: var(--lco-text-muted);
+  white-space: nowrap; user-select: none;
+  transition: background 0.1s;
+}
+.terminal-tab:hover { background: #3c3c3c; }
+.terminal-tab.active { background: var(--lco-bg-panel); color: var(--lco-text); border-bottom: 2px solid var(--lco-accent); }
+.terminal-tab .tab-name { flex: 1; }
+.terminal-tab .tab-close {
+  background: none; border: none; color: var(--lco-text-muted);
+  cursor: pointer; font-size: 10px; padding: 0 2px; margin-left: 4px;
+  opacity: 0; transition: opacity 0.1s;
+}
+.terminal-tab:hover .tab-close { opacity: 1; }
+.terminal-tab .tab-close:hover { color: var(--lco-error); }
+
+/* ── Terminal Container ── */
 #terminal-container {
   flex: 1;
   padding: 0;
