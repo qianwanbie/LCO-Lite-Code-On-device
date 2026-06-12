@@ -775,6 +775,11 @@ function handleTerminalConnection(ws) {
         }
       });
 
+      // Force PS1 render: send initial resize
+      if (ptyProcess.resize) {
+        ptyProcess.resize(80, 24);
+      }
+
       // PTY exit
       ptyProcess.onExit(({ exitCode, signal }) => {
         console.log('[LCO Backend] PTY exited with code', exitCode, 'signal', signal);
@@ -880,6 +885,7 @@ function handleTerminalConnection(ws) {
 
       if (msg.type === 'input') {
         if (ptyProcess) {
+          console.log('[LCO Backend] PTY input:', JSON.stringify(msg.data));
           ptyProcess.write(msg.data);
         } else if (bashProcess) {
           bashProcess.stdin.write(msg.data);

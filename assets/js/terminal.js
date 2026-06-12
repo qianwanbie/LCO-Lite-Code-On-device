@@ -468,6 +468,9 @@
       }
       try { active.xterm.refresh(0, active.xterm.rows - 1); } catch(e) {}
     }, 60);
+    // Focus the terminal so keyboard input reaches xterm
+    setTimeout(function () { try { active.xterm.focus(); } catch(e) {} }, 100);
+
     // ResizeObserver: if container width is 0, wait for layout then fit
     if (active._resizeObs) active._resizeObs.disconnect();
     active._resizeObs = new ResizeObserver(function () {
