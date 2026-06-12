@@ -2,7 +2,10 @@
 
 [![LCO v1.0.0 Release](https://img.shields.io/badge/Download-LCO_v1.0.0_APK-blue?logo=android)](https://github.com/qianwanbie/LCO-Lite-Code-On-device/releases/tag/v1.0.0)
 
-**LCO is a code IDE for Android.** It combines a Monaco Editor, terminal emulator, file manager, and Git client into a single app. Claude Code runs in the terminal for AI-assisted coding. All editor components are bundled offline — no network needed to start coding.
+**LCO is a code IDE for Android.** It combines a Monaco Editor, terminal emulator, file manager, and Git client into a single app. Claude Code can run in the terminal for AI-assisted coding. All editor components are bundled offline — no network needed to start coding.
+
+> **[Download lco-v1.0.0.apk](https://github.com/qianwanbie/LCO-Lite-Code-On-device/releases/download/v1.0.0/lco-v1.0.0.apk)**
+> `sha256: 91bcf0da9e8ccdd0f9f909048d32fe41aac1732c54aea3bf325a0cf29074aa77`
 
 ## Features
 
