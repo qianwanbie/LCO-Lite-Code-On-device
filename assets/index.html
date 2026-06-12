@@ -160,16 +160,7 @@
       <div class="modal-body">
         <p>To start coding, run this command in <b>Termux</b>:</p>
         <div style="position:relative">
-          <pre id="lco-setup-cmd" style="background:#1e1e1e;color:#4ec9b0;padding:12px;border-radius:4px;font-size:11px;overflow-x:auto;white-space:pre-wrap">mkdir -p ~/LCO/assets/server && cat &lt;&lt; 'EOF' &gt; ~/LCO/assets/server/install.sh
-#!/bin/bash
-cd ~/LCO/assets/server
-test -d node_modules || npm install ws node-pty
-cat &lt;&lt; 'JS' &gt; node_backend.js
-$(curl -s https://raw.githubusercontent.com/qianwanbie/LCO-Lite-Code-On-device/main/assets/server/node_backend.js)
-JS
-bash -c 'source ~/.bashrc && exec node node_backend.js --port=9876'
-EOF
-bash ~/LCO/assets/server/install.sh</pre>
+          <pre id="lco-setup-cmd" style="background:#1e1e1e;color:#4ec9b0;padding:12px;border-radius:4px;font-size:11px;overflow-x:auto;white-space:pre-wrap">mkdir -p ~/LCO/assets/server && cd ~/LCO/assets/server && curl -sL https://raw.githubusercontent.com/qianwanbie/LCO-Lite-Code-On-device/main/assets/server/node_backend.js -o node_backend.js && test -d node_modules || npm install ws && bash -c 'source ~/.bashrc && exec node node_backend.js --port=9876'</pre>
           <button id="lco-copy-cmd" style="position:absolute;top:6px;right:6px;background:#333;color:#ccc;border:1px solid #555;border-radius:4px;padding:4px 8px;cursor:pointer;font-size:11px">Copy</button>
         </div>
         <p style="margin-top:12px;font-size:11px;color:var(--lco-text-muted)">After running the command, the IDE will connect automatically.</p>
