@@ -76,6 +76,9 @@ class TermuxEngine implements IDEEngine {
   Future<JsonRpcResponse> updateLLMConfig(Map<String, dynamic> config) =>
       _sendRpc('updateLLMConfig', {'config': config});
 
+  Future<JsonRpcResponse> openUrl(String url) =>
+      _sendRpc('openUrl', {'url': url});
+
   @override
   Stream<FileChangeEvent> get fileChangeStream => _fileChangeController.stream;
 

@@ -173,6 +173,10 @@ class JSBridge {
         final cfg = params['config'] as Map<String, dynamic>? ?? {};
         return _withId(await _engine.updateLLMConfig(cfg), id);
 
+      case 'openUrl':
+        final url = params['url'] as String? ?? '';
+        return _withId(await _engine.openUrl(url), id);
+
       default:
         return JsonRpcResponse.error(
           id: id,

@@ -456,6 +456,17 @@ async function dispatchRpc(id, method, params) {
         else if (ext === '.py') cmd = 'python ' + JSON.stringify(scriptPath);
         else if (ext === '.sh') cmd = 'bash ' + JSON.stringify(scriptPath);
         else if (ext === '.dart') cmd = 'dart ' + JSON.stringify(scriptPath);
+        else if (ext === '.rb') cmd = 'ruby ' + JSON.stringify(scriptPath);
+        else if (ext === '.pl') cmd = 'perl ' + JSON.stringify(scriptPath);
+        else if (ext === '.php') cmd = 'php ' + JSON.stringify(scriptPath);
+        else if (ext === '.lua') cmd = 'lua ' + JSON.stringify(scriptPath);
+        else if (ext === '.html') {
+          // HTML: just show a message — use Web Preview panel to view
+          return jsonResult(id, { ok: true, path: params.path, running: false,
+            stdout: 'HTML file detected. Use ◉ Preview panel with a local server:\n' +
+                    '  cd ' + path.dirname(scriptPath) + ' && python -m http.server 8080\n' +
+                    'Then open http://127.0.0.1:8080/' + path.basename(scriptPath) + '\n' });
+        }
         else return jsonError(id, -32602, 'Unsupported file type: ' + ext);
 
         // Execute and stream output to terminal clients
@@ -605,6 +616,18 @@ async function dispatchRpc(id, method, params) {
           return jsonResult(id, { ok: true, path: LLM_CONFIG_PATH });
         } catch (e) {
           return jsonError(id, -32603, 'Failed to save config: ' + e.message);
+        }
+      }
+
+      // ── openUrl ──
+      case 'openUrl': {
+        const url = params.url || '';
+        if (!url) return jsonError(id, -32602, 'Missing url');
+        try {
+          execSync('termux-open-url "' + url.replace(/"/g, '\\"') + '"', { timeout: 5000 });
+          return jsonResult(id, { ok: true, url: url });
+        } catch (e) {
+          return jsonError(id, -32603, 'Failed to open URL: ' + e.message);
         }
       }
 

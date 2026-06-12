@@ -41,6 +41,9 @@ abstract class IDEEngine {
   /// Update LLM provider configuration.
   Future<JsonRpcResponse> updateLLMConfig(Map<String, dynamic> config);
 
+  /// Open a URL in the device browser.
+  Future<JsonRpcResponse> openUrl(String url);
+
   /// One-time initialization. Called once after the engine is constructed.
   ///
   /// [MockEngine] creates its temp directory here.

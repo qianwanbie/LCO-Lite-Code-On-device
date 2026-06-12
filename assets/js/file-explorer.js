@@ -369,7 +369,18 @@
 
   function runScriptFile(path, name) {
     var ext = name.split('.').pop().toLowerCase();
-    if (['py', 'js', 'sh', 'dart', 'html'].indexOf(ext) < 0) {
+    // .html opens web preview instead of executing
+    if (ext === 'html') {
+      var panel = document.getElementById('lco-preview-panel');
+      if (panel) panel.classList.remove('hidden');
+      var urlInput = document.getElementById('lco-preview-url');
+      if (urlInput) {
+        urlInput.value = 'http://127.0.0.1:8080/' + path;
+        updateStatus('◉ Preview ready: ' + path);
+      }
+      return;
+    }
+    if (['py', 'js', 'sh', 'dart'].indexOf(ext) < 0) {
       updateStatus('⚠ Unsupported type: .' + ext, 'warn');
       return;
     }
